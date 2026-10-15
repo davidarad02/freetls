@@ -15,8 +15,8 @@ Highlights:
 - **JA4** control to a very high degree, with **JA3** and **JA4S** reporting.
 - Three modes: **Specific**, **Partially-random**, **True-random**.
 - Real **TLS 1.0–1.3** handshakes (completed where the server allows); no SSLv3.
-- A catalog of **170 common-JA4 profiles** derived from uTLS's real browser
-  presets (Chrome, Firefox, Safari, Edge, iOS, Android/OkHttp, 360, QQ, Go).
+- A catalog of **220 common-JA4 profiles** derived from uTLS's real, current
+  browser presets (Chrome up to 155, Firefox 148, Safari 26.3, Edge, iOS, Android/OkHttp, 360, QQ, Go).
 - Drop-in **requests**, **httpx** (sync + async) and **aiohttp** transports.
 - An `ssl.SSLContext`-style `wrap_socket()` API.
 - Go-side **HTTP/2** with controllable SETTINGS / WINDOW_UPDATE / pseudo-header
@@ -57,7 +57,7 @@ third-party fingerprint services.
 - Optional HTTP integrations: `requests` / `urllib3`, `httpx`, `aiohttp`.
 - Optional certificate parity: `cryptography`.
 - Only for **building from source / editable installs**: a **Go toolchain
-  (Go 1.24+)**. Prebuilt wheels bundle the compiled engine, so end users don't
+  (Go 1.27+)**. Prebuilt wheels bundle the compiled engine, so end users don't
   need Go. Go is found via `$FREETLS_GO`, then `go` on `PATH`, then common
   locations (`~/.local/go`, `/usr/local/go`, `/opt/go`, Homebrew).
 
@@ -266,13 +266,13 @@ Name matching is case-insensitive. An unknown name raises a clear `ValueError`
 ```python
 from freetls import profiles
 
-profiles.names()                      # ~170 aliases, e.g. "chrome_133"
+profiles.names()                      # 220 aliases, e.g. "chrome_155"
 p = profiles.get("chrome_133")        # -> Profile(name, alias, preset, ja4, ja3, ...)
 spec = p.spec(server_name="example.com", verify=False)
 
 # or in one call:
 spec = profiles.spec("firefox_120", server_name="example.com")
-print(profiles.catalog_info())        # {"count": 170, "distinct_ja4": 95, ...}
+print(profiles.catalog_info())        # {"count": 220, "distinct_ja4": 110, ...}
 ```
 
 Each profile's stored `ja4` is produced by the engine and verified by tests.
@@ -619,7 +619,7 @@ The `.so` is a build artifact; run `make native` (or `go build -buildmode=c-shar
 and make sure no stale copy shadows it in `src/freetls/_lib/`.
 
 **`pip install .` / the first import fails with a Go error.**
-Install Go (1.24+), point at it with `FREETLS_GO=/path/to/go`, or install the
+Install Go (1.27+), point at it with `FREETLS_GO=/path/to/go`, or install the
 prebuilt wheel. Builds fetch Go modules, so a network connection is needed the
 first time (or `cd native && go mod download` ahead of time). To build without
 the engine (docs only): `FREETLS_SKIP_NATIVE=1 pip install .`.

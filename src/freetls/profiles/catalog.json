@@ -1,5 +1,5 @@
 {
- "count": 170,
+ "count": 220,
  "engine_version": "freetls/0.0.1",
  "generated_by": "tools/gen_catalog.py",
  "profiles": [
@@ -106,6 +106,58 @@
    "name": "Hello360_7_5_nosni_noalpn",
    "no_sni": true,
    "preset": "Hello360_7_5"
+  },
+  {
+   "alias": "360_auto",
+   "alpn": null,
+   "ja3": "c405bbbe31c0e53ac4c8448355b2af5b",
+   "ja4": "t12d2010s2_0bf03fa604e3_736b2a1ed4d3",
+   "ja4_a": "t12d2010s2",
+   "name": "Hello360_Auto",
+   "no_sni": false,
+   "preset": "Hello360_Auto"
+  },
+  {
+   "alias": "360_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "92a0980a0fe5d740b34f2c0ae9ebb3cd",
+   "ja4": "t12d2010h1_0bf03fa604e3_736b2a1ed4d3",
+   "ja4_a": "t12d2010h1",
+   "name": "Hello360_Auto_h1",
+   "no_sni": false,
+   "preset": "Hello360_Auto"
+  },
+  {
+   "alias": "360_auto_noalpn",
+   "alpn": [],
+   "ja3": "76d36fc79db002baa1b5e741fcd863bb",
+   "ja4": "t12d200900_0bf03fa604e3_736b2a1ed4d3",
+   "ja4_a": "t12d200900",
+   "name": "Hello360_Auto_noalpn",
+   "no_sni": false,
+   "preset": "Hello360_Auto"
+  },
+  {
+   "alias": "360_auto_nosni",
+   "alpn": null,
+   "ja3": "e06d760968cc8934ad12d91ba389bd20",
+   "ja4": "t12i2009s2_0bf03fa604e3_736b2a1ed4d3",
+   "ja4_a": "t12i2009s2",
+   "name": "Hello360_Auto_nosni",
+   "no_sni": true,
+   "preset": "Hello360_Auto"
+  },
+  {
+   "alias": "360_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "94654288a540d799cf45828da3a96669",
+   "ja4": "t12i200800_0bf03fa604e3_736b2a1ed4d3",
+   "ja4_a": "t12i200800",
+   "name": "Hello360_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "Hello360_Auto"
   },
   {
    "alias": "android_11_okhttp",
@@ -266,7 +318,7 @@
   {
    "alias": "chrome_106_shuffle",
    "alpn": null,
-   "ja3": "88412d42fbb79b70fcd27eeb082463ab",
+   "ja3": "9c4644cff0c8bd33f11b942aee0a6a92",
    "ja4": "t13d1516h2_8daaf6152771_e5627efa2ab1",
    "ja4_a": "t13d1516h2",
    "name": "HelloChrome_106_Shuffle",
@@ -278,7 +330,7 @@
    "alpn": [
     "http/1.1"
    ],
-   "ja3": "5084ba88e656e8f2ea13f3a5a52cd17a",
+   "ja3": "a565cf4fba9e829c2505ec53ee6bfa3b",
    "ja4": "t13d1516h1_8daaf6152771_e5627efa2ab1",
    "ja4_a": "t13d1516h1",
    "name": "HelloChrome_106_Shuffle_h1",
@@ -288,7 +340,7 @@
   {
    "alias": "chrome_106_shuffle_noalpn",
    "alpn": [],
-   "ja3": "f3dfe487e5952ef15246b8ae1edb3cde",
+   "ja3": "ad66d2c37adc1dc1c53e66c74360cbb9",
    "ja4": "t13d151500_8daaf6152771_e5627efa2ab1",
    "ja4_a": "t13d151500",
    "name": "HelloChrome_106_Shuffle_noalpn",
@@ -298,7 +350,7 @@
   {
    "alias": "chrome_106_shuffle_nosni",
    "alpn": null,
-   "ja3": "ec0b4c8e394f5cc0c9eb5f1d6dd80bd8",
+   "ja3": "835788fc103a2ed744ce9f82757beea9",
    "ja4": "t13i1515h2_8daaf6152771_e5627efa2ab1",
    "ja4_a": "t13i1515h2",
    "name": "HelloChrome_106_Shuffle_nosni",
@@ -308,7 +360,7 @@
   {
    "alias": "chrome_106_shuffle_nosni_noalpn",
    "alpn": [],
-   "ja3": "2d37eb144f205e968e09532f096e87d0",
+   "ja3": "0fada0736e305de482dccc5efa0ae4e7",
    "ja4": "t13i151400_8daaf6152771_e5627efa2ab1",
    "ja4_a": "t13i151400",
    "name": "HelloChrome_106_Shuffle_nosni_noalpn",
@@ -318,7 +370,7 @@
   {
    "alias": "chrome_115_pq",
    "alpn": null,
-   "ja3": "593e3b69ccfa02990dd95a5f18e5ac09",
+   "ja3": "7ce0ad299bca0a61578051d02cc0be36",
    "ja4": "t13d1515h2_8daaf6152771_f37e75b10bcc",
    "ja4_a": "t13d1515h2",
    "name": "HelloChrome_115_PQ",
@@ -330,7 +382,7 @@
    "alpn": [
     "http/1.1"
    ],
-   "ja3": "0d37f2149649fe6d83e328eef3d9dc02",
+   "ja3": "b7515d724c92c424a90ed22b24168bad",
    "ja4": "t13d1515h1_8daaf6152771_f37e75b10bcc",
    "ja4_a": "t13d1515h1",
    "name": "HelloChrome_115_PQ_h1",
@@ -340,7 +392,7 @@
   {
    "alias": "chrome_115_pq_noalpn",
    "alpn": [],
-   "ja3": "6cdcf56020695b85b46e45c84d3f7822",
+   "ja3": "fe16ab53ab6182ec64137905bc5e3aa7",
    "ja4": "t13d151400_8daaf6152771_f37e75b10bcc",
    "ja4_a": "t13d151400",
    "name": "HelloChrome_115_PQ_noalpn",
@@ -350,7 +402,7 @@
   {
    "alias": "chrome_115_pq_nosni",
    "alpn": null,
-   "ja3": "715314bb40fd9224c024a7bb4bbf9c73",
+   "ja3": "9243bdce07f33756e7081e6ae4a8542f",
    "ja4": "t13i1514h2_8daaf6152771_f37e75b10bcc",
    "ja4_a": "t13i1514h2",
    "name": "HelloChrome_115_PQ_nosni",
@@ -360,7 +412,7 @@
   {
    "alias": "chrome_115_pq_nosni_noalpn",
    "alpn": [],
-   "ja3": "b7cf8a61c0f66d80b127b5b188f59630",
+   "ja3": "ac81691b7f125648d84c9d8fa015b962",
    "ja4": "t13i151300_8daaf6152771_f37e75b10bcc",
    "ja4_a": "t13i151300",
    "name": "HelloChrome_115_PQ_nosni_noalpn",
@@ -370,7 +422,7 @@
   {
    "alias": "chrome_120_pq",
    "alpn": null,
-   "ja3": "e8b9225df4ea3abd97c8f617fdc004d0",
+   "ja3": "ee99ce131911ba7670438943be98a992",
    "ja4": "t13d1516h2_8daaf6152771_02713d6af862",
    "ja4_a": "t13d1516h2",
    "name": "HelloChrome_120_PQ",
@@ -382,7 +434,7 @@
    "alpn": [
     "http/1.1"
    ],
-   "ja3": "22c74a42fb1f9f749e848bcd49024f1d",
+   "ja3": "0541b7dd3e9a5bfd167828277c023bdf",
    "ja4": "t13d1516h1_8daaf6152771_02713d6af862",
    "ja4_a": "t13d1516h1",
    "name": "HelloChrome_120_PQ_h1",
@@ -392,7 +444,7 @@
   {
    "alias": "chrome_120_pq_noalpn",
    "alpn": [],
-   "ja3": "6c9a0b77d2b2f03391b070452455f361",
+   "ja3": "719085313e72e80c53d5dc9f19b64cb4",
    "ja4": "t13d151500_8daaf6152771_02713d6af862",
    "ja4_a": "t13d151500",
    "name": "HelloChrome_120_PQ_noalpn",
@@ -402,7 +454,7 @@
   {
    "alias": "chrome_120_pq_nosni",
    "alpn": null,
-   "ja3": "f9907920d9383f378636b4a6ae70cd84",
+   "ja3": "8785dad4abd29c898c040a19cf9856f5",
    "ja4": "t13i1515h2_8daaf6152771_02713d6af862",
    "ja4_a": "t13i1515h2",
    "name": "HelloChrome_120_PQ_nosni",
@@ -412,7 +464,7 @@
   {
    "alias": "chrome_120_pq_nosni_noalpn",
    "alpn": [],
-   "ja3": "df2f530b29d66c2c09a4e588b507fa89",
+   "ja3": "ab87d8954961b0ecefddb13327fb37e5",
    "ja4": "t13i151400_8daaf6152771_02713d6af862",
    "ja4_a": "t13i151400",
    "name": "HelloChrome_120_PQ_nosni_noalpn",
@@ -422,7 +474,7 @@
   {
    "alias": "chrome_131",
    "alpn": null,
-   "ja3": "1da3cb586a890752987b79e7b04384de",
+   "ja3": "dd20df1d42b7a1c8200dd0eabb41e878",
    "ja4": "t13d1516h2_8daaf6152771_02713d6af862",
    "ja4_a": "t13d1516h2",
    "name": "HelloChrome_131",
@@ -434,7 +486,7 @@
    "alpn": [
     "http/1.1"
    ],
-   "ja3": "470c43c24996707ee4b15aa1656488cc",
+   "ja3": "448ae4f6e4b9e2373ce68181f0c50367",
    "ja4": "t13d1516h1_8daaf6152771_02713d6af862",
    "ja4_a": "t13d1516h1",
    "name": "HelloChrome_131_h1",
@@ -444,7 +496,7 @@
   {
    "alias": "chrome_131_noalpn",
    "alpn": [],
-   "ja3": "38675fc749f8977159f2e47f0f1cad92",
+   "ja3": "9928d6098c044b239e16121b235ec49c",
    "ja4": "t13d151500_8daaf6152771_02713d6af862",
    "ja4_a": "t13d151500",
    "name": "HelloChrome_131_noalpn",
@@ -454,7 +506,7 @@
   {
    "alias": "chrome_131_nosni",
    "alpn": null,
-   "ja3": "d3cc012360c1ee8b7bb35d2ba72359d2",
+   "ja3": "e90440057f37e82717a589ef7b8d40ac",
    "ja4": "t13i1515h2_8daaf6152771_02713d6af862",
    "ja4_a": "t13i1515h2",
    "name": "HelloChrome_131_nosni",
@@ -464,7 +516,7 @@
   {
    "alias": "chrome_131_nosni_noalpn",
    "alpn": [],
-   "ja3": "0a0d24d9902381254eebaafc21ec94fc",
+   "ja3": "faf81788b5b739a31f57a0dba1d1e3fc",
    "ja4": "t13i151400_8daaf6152771_02713d6af862",
    "ja4_a": "t13i151400",
    "name": "HelloChrome_131_nosni_noalpn",
@@ -474,7 +526,7 @@
   {
    "alias": "chrome_133",
    "alpn": null,
-   "ja3": "d3c821d52285a920c0f3c14357d45458",
+   "ja3": "64164700ed4018e0d7c66e81d123f92e",
    "ja4": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
    "ja4_a": "t13d1516h2",
    "name": "HelloChrome_133",
@@ -486,7 +538,7 @@
    "alpn": [
     "http/1.1"
    ],
-   "ja3": "ab73972ffd8b9f8b836aa5a5720afa70",
+   "ja3": "787e83d56e8721527c5ac1f38a946f87",
    "ja4": "t13d1516h1_8daaf6152771_d8a2da3f94cd",
    "ja4_a": "t13d1516h1",
    "name": "HelloChrome_133_h1",
@@ -496,7 +548,7 @@
   {
    "alias": "chrome_133_noalpn",
    "alpn": [],
-   "ja3": "739c89f030075894140cf2b4a7144d72",
+   "ja3": "b96783e51de4aa9a41dc56ab65ea2c3e",
    "ja4": "t13d151500_8daaf6152771_d8a2da3f94cd",
    "ja4_a": "t13d151500",
    "name": "HelloChrome_133_noalpn",
@@ -506,7 +558,7 @@
   {
    "alias": "chrome_133_nosni",
    "alpn": null,
-   "ja3": "37248e1a9bd0c5c2cc10aa716ac1e35d",
+   "ja3": "c6c6a87f1413b325eb114c3298966f1d",
    "ja4": "t13i1515h2_8daaf6152771_d8a2da3f94cd",
    "ja4_a": "t13i1515h2",
    "name": "HelloChrome_133_nosni",
@@ -516,12 +568,64 @@
   {
    "alias": "chrome_133_nosni_noalpn",
    "alpn": [],
-   "ja3": "3ee84160420b0aa5938353b1a4e92b25",
+   "ja3": "eecb0e2c9c59286a4194eb499567f2be",
    "ja4": "t13i151400_8daaf6152771_d8a2da3f94cd",
    "ja4_a": "t13i151400",
    "name": "HelloChrome_133_nosni_noalpn",
    "no_sni": true,
    "preset": "HelloChrome_133"
+  },
+  {
+   "alias": "chrome_155",
+   "alpn": null,
+   "ja3": "8232c72c9de60ce80e01eaefda6d6aff",
+   "ja4": "t13d1517h2_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d1517h2",
+   "name": "HelloChrome_155",
+   "no_sni": false,
+   "preset": "HelloChrome_155"
+  },
+  {
+   "alias": "chrome_155_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "eeb6834a047e92c241c2213b818d433d",
+   "ja4": "t13d1517h1_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d1517h1",
+   "name": "HelloChrome_155_h1",
+   "no_sni": false,
+   "preset": "HelloChrome_155"
+  },
+  {
+   "alias": "chrome_155_noalpn",
+   "alpn": [],
+   "ja3": "562b52d7c956448c5f24684705c3604e",
+   "ja4": "t13d151600_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d151600",
+   "name": "HelloChrome_155_noalpn",
+   "no_sni": false,
+   "preset": "HelloChrome_155"
+  },
+  {
+   "alias": "chrome_155_nosni",
+   "alpn": null,
+   "ja3": "a719468fbb7d166f8caa4754f4bb9301",
+   "ja4": "t13i1516h2_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13i1516h2",
+   "name": "HelloChrome_155_nosni",
+   "no_sni": true,
+   "preset": "HelloChrome_155"
+  },
+  {
+   "alias": "chrome_155_nosni_noalpn",
+   "alpn": [],
+   "ja3": "6715e1c59fb6a69c8850aa3b1e050401",
+   "ja4": "t13i151500_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13i151500",
+   "name": "HelloChrome_155_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloChrome_155"
   },
   {
    "alias": "chrome_58",
@@ -888,6 +992,58 @@
    "preset": "HelloChrome_96"
   },
   {
+   "alias": "chrome_auto",
+   "alpn": null,
+   "ja3": "bef0b8f9cad96730e7a06fcb53260cd8",
+   "ja4": "t13d1517h2_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d1517h2",
+   "name": "HelloChrome_Auto",
+   "no_sni": false,
+   "preset": "HelloChrome_Auto"
+  },
+  {
+   "alias": "chrome_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "4a9a8c6c64a09d60a4a4199b9c882793",
+   "ja4": "t13d1517h1_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d1517h1",
+   "name": "HelloChrome_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloChrome_Auto"
+  },
+  {
+   "alias": "chrome_auto_noalpn",
+   "alpn": [],
+   "ja3": "19bbbc01278dca1a280d12201941d618",
+   "ja4": "t13d151600_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13d151600",
+   "name": "HelloChrome_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloChrome_Auto"
+  },
+  {
+   "alias": "chrome_auto_nosni",
+   "alpn": null,
+   "ja3": "ecb744bb3cbf34b7e05b621c3de7f0bd",
+   "ja4": "t13i1516h2_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13i1516h2",
+   "name": "HelloChrome_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloChrome_Auto"
+  },
+  {
+   "alias": "chrome_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "49319c86ebbb1521f3d8c55eded2589c",
+   "ja4": "t13i151500_8daaf6152771_cb7bf5808d99",
+   "ja4_a": "t13i151500",
+   "name": "HelloChrome_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloChrome_Auto"
+  },
+  {
    "alias": "edge_106",
    "alpn": null,
    "ja3": "cd08e31494f9531f560d64c695473da9",
@@ -990,6 +1146,58 @@
    "name": "HelloEdge_85_nosni_noalpn",
    "no_sni": true,
    "preset": "HelloEdge_85"
+  },
+  {
+   "alias": "edge_auto",
+   "alpn": null,
+   "ja3": "b32309a26951912be7dba376398abc3b",
+   "ja4": "t13d1515h2_8daaf6152771_de4a06bb82e3",
+   "ja4_a": "t13d1515h2",
+   "name": "HelloEdge_Auto",
+   "no_sni": false,
+   "preset": "HelloEdge_Auto"
+  },
+  {
+   "alias": "edge_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "782715d2242b9d9c169c936a9a95db94",
+   "ja4": "t13d1515h1_8daaf6152771_de4a06bb82e3",
+   "ja4_a": "t13d1515h1",
+   "name": "HelloEdge_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloEdge_Auto"
+  },
+  {
+   "alias": "edge_auto_noalpn",
+   "alpn": [],
+   "ja3": "74ad8ec6876e2e3366bfd566581ca7e8",
+   "ja4": "t13d151400_8daaf6152771_de4a06bb82e3",
+   "ja4_a": "t13d151400",
+   "name": "HelloEdge_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloEdge_Auto"
+  },
+  {
+   "alias": "edge_auto_nosni",
+   "alpn": null,
+   "ja3": "b592adaa596bb72a5c1ccdbecae52e3f",
+   "ja4": "t13i1514h2_8daaf6152771_de4a06bb82e3",
+   "ja4_a": "t13i1514h2",
+   "name": "HelloEdge_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloEdge_Auto"
+  },
+  {
+   "alias": "edge_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "8a6f9c3259c58527963c5c922bd0ea87",
+   "ja4": "t13i151300_8daaf6152771_de4a06bb82e3",
+   "ja4_a": "t13i151300",
+   "name": "HelloEdge_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloEdge_Auto"
   },
   {
    "alias": "firefox_102",
@@ -1146,6 +1354,58 @@
    "name": "HelloFirefox_120_nosni_noalpn",
    "no_sni": true,
    "preset": "HelloFirefox_120"
+  },
+  {
+   "alias": "firefox_148",
+   "alpn": null,
+   "ja3": "7704a11cf87dfcf33080b90ce11d5527",
+   "ja4": "t13d1715h2_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d1715h2",
+   "name": "HelloFirefox_148",
+   "no_sni": false,
+   "preset": "HelloFirefox_148"
+  },
+  {
+   "alias": "firefox_148_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "4bd3c9007b892e21a0070de21273b196",
+   "ja4": "t13d1715h1_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d1715h1",
+   "name": "HelloFirefox_148_h1",
+   "no_sni": false,
+   "preset": "HelloFirefox_148"
+  },
+  {
+   "alias": "firefox_148_noalpn",
+   "alpn": [],
+   "ja3": "161a93dc317d3128c84d53b9b4a0efac",
+   "ja4": "t13d171400_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d171400",
+   "name": "HelloFirefox_148_noalpn",
+   "no_sni": false,
+   "preset": "HelloFirefox_148"
+  },
+  {
+   "alias": "firefox_148_nosni",
+   "alpn": null,
+   "ja3": "0b2c3f54cf7ce10356ae9d22c416bbf7",
+   "ja4": "t13i1714h2_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13i1714h2",
+   "name": "HelloFirefox_148_nosni",
+   "no_sni": true,
+   "preset": "HelloFirefox_148"
+  },
+  {
+   "alias": "firefox_148_nosni_noalpn",
+   "alpn": [],
+   "ja3": "0f2a31322f48d30f58df601c8f5d020e",
+   "ja4": "t13i171300_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13i171300",
+   "name": "HelloFirefox_148_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloFirefox_148"
   },
   {
    "alias": "firefox_55",
@@ -1408,6 +1668,58 @@
    "preset": "HelloFirefox_99"
   },
   {
+   "alias": "firefox_auto",
+   "alpn": null,
+   "ja3": "7704a11cf87dfcf33080b90ce11d5527",
+   "ja4": "t13d1715h2_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d1715h2",
+   "name": "HelloFirefox_Auto",
+   "no_sni": false,
+   "preset": "HelloFirefox_Auto"
+  },
+  {
+   "alias": "firefox_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "4bd3c9007b892e21a0070de21273b196",
+   "ja4": "t13d1715h1_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d1715h1",
+   "name": "HelloFirefox_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloFirefox_Auto"
+  },
+  {
+   "alias": "firefox_auto_noalpn",
+   "alpn": [],
+   "ja3": "161a93dc317d3128c84d53b9b4a0efac",
+   "ja4": "t13d171400_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13d171400",
+   "name": "HelloFirefox_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloFirefox_Auto"
+  },
+  {
+   "alias": "firefox_auto_nosni",
+   "alpn": null,
+   "ja3": "0b2c3f54cf7ce10356ae9d22c416bbf7",
+   "ja4": "t13i1714h2_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13i1714h2",
+   "name": "HelloFirefox_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloFirefox_Auto"
+  },
+  {
+   "alias": "firefox_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "0f2a31322f48d30f58df601c8f5d020e",
+   "ja4": "t13i171300_5b57614c22b0_a54fffd0eb61",
+   "ja4_a": "t13i171300",
+   "name": "HelloFirefox_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloFirefox_Auto"
+  },
+  {
    "alias": "golang",
    "alpn": null,
    "ja3": "95e99ae53d94fc6855842573aaf1bb17",
@@ -1668,6 +1980,58 @@
    "preset": "HelloIOS_14"
   },
   {
+   "alias": "ios_auto",
+   "alpn": null,
+   "ja3": "656b9a2f4de6ed4909e157482860ab3d",
+   "ja4": "t13d2613h2_2802a3db6c62_845d286b0d67",
+   "ja4_a": "t13d2613h2",
+   "name": "HelloIOS_Auto",
+   "no_sni": false,
+   "preset": "HelloIOS_Auto"
+  },
+  {
+   "alias": "ios_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "f7648e1c2c47f2a7e9a822b4200f9df4",
+   "ja4": "t13d2613h1_2802a3db6c62_845d286b0d67",
+   "ja4_a": "t13d2613h1",
+   "name": "HelloIOS_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloIOS_Auto"
+  },
+  {
+   "alias": "ios_auto_noalpn",
+   "alpn": [],
+   "ja3": "66b2d7acea2c20aeeebd69c8d44089d7",
+   "ja4": "t13d261200_2802a3db6c62_845d286b0d67",
+   "ja4_a": "t13d261200",
+   "name": "HelloIOS_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloIOS_Auto"
+  },
+  {
+   "alias": "ios_auto_nosni",
+   "alpn": null,
+   "ja3": "bb380deb6d79afcbb33065ead1ffa0ce",
+   "ja4": "t13i2612h2_2802a3db6c62_845d286b0d67",
+   "ja4_a": "t13i2612h2",
+   "name": "HelloIOS_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloIOS_Auto"
+  },
+  {
+   "alias": "ios_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "e4e5b051ee864146142af1d514f9ee01",
+   "ja4": "t13i261100_2802a3db6c62_845d286b0d67",
+   "ja4_a": "t13i261100",
+   "name": "HelloIOS_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloIOS_Auto"
+  },
+  {
    "alias": "qq_11_1",
    "alpn": null,
    "ja3": "cd08e31494f9531f560d64c695473da9",
@@ -1720,6 +2084,58 @@
    "preset": "HelloQQ_11_1"
   },
   {
+   "alias": "qq_auto",
+   "alpn": null,
+   "ja3": "cd08e31494f9531f560d64c695473da9",
+   "ja4": "t13d1516h2_8daaf6152771_e5627efa2ab1",
+   "ja4_a": "t13d1516h2",
+   "name": "HelloQQ_Auto",
+   "no_sni": false,
+   "preset": "HelloQQ_Auto"
+  },
+  {
+   "alias": "qq_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "9e08fa94060c5355c33dcddd6f30799d",
+   "ja4": "t13d1516h1_8daaf6152771_e5627efa2ab1",
+   "ja4_a": "t13d1516h1",
+   "name": "HelloQQ_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloQQ_Auto"
+  },
+  {
+   "alias": "qq_auto_noalpn",
+   "alpn": [],
+   "ja3": "27ac0063ff0b4e22ec8f0dc0b2aa4bff",
+   "ja4": "t13d151500_8daaf6152771_e5627efa2ab1",
+   "ja4_a": "t13d151500",
+   "name": "HelloQQ_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloQQ_Auto"
+  },
+  {
+   "alias": "qq_auto_nosni",
+   "alpn": null,
+   "ja3": "bcfedf9f1709891a892b5bb1571df55c",
+   "ja4": "t13i1515h2_8daaf6152771_e5627efa2ab1",
+   "ja4_a": "t13i1515h2",
+   "name": "HelloQQ_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloQQ_Auto"
+  },
+  {
+   "alias": "qq_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "634fed5c9c1d128756cd1257d367aab8",
+   "ja4": "t13i151400_8daaf6152771_e5627efa2ab1",
+   "ja4_a": "t13i151400",
+   "name": "HelloQQ_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloQQ_Auto"
+  },
+  {
    "alias": "safari_16_0",
    "alpn": null,
    "ja3": "773906b0efdefa24a7f2b8eb6985bf37",
@@ -1770,6 +2186,110 @@
    "name": "HelloSafari_16_0_nosni_noalpn",
    "no_sni": true,
    "preset": "HelloSafari_16_0"
+  },
+  {
+   "alias": "safari_26_3",
+   "alpn": null,
+   "ja3": "ecdf4f49dd59effc439639da29186671",
+   "ja4": "t13d2013h2_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d2013h2",
+   "name": "HelloSafari_26_3",
+   "no_sni": false,
+   "preset": "HelloSafari_26_3"
+  },
+  {
+   "alias": "safari_26_3_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "751c36a881a6deea1cd3cc517b8fd81d",
+   "ja4": "t13d2013h1_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d2013h1",
+   "name": "HelloSafari_26_3_h1",
+   "no_sni": false,
+   "preset": "HelloSafari_26_3"
+  },
+  {
+   "alias": "safari_26_3_noalpn",
+   "alpn": [],
+   "ja3": "64f30c7c07408ed3efa93e929d3413f6",
+   "ja4": "t13d201200_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d201200",
+   "name": "HelloSafari_26_3_noalpn",
+   "no_sni": false,
+   "preset": "HelloSafari_26_3"
+  },
+  {
+   "alias": "safari_26_3_nosni",
+   "alpn": null,
+   "ja3": "0ca3c3ef30e6e88f75aeb1fb33433d14",
+   "ja4": "t13i2012h2_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13i2012h2",
+   "name": "HelloSafari_26_3_nosni",
+   "no_sni": true,
+   "preset": "HelloSafari_26_3"
+  },
+  {
+   "alias": "safari_26_3_nosni_noalpn",
+   "alpn": [],
+   "ja3": "67da18e09ee25349466cfeb361bbd36d",
+   "ja4": "t13i201100_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13i201100",
+   "name": "HelloSafari_26_3_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloSafari_26_3"
+  },
+  {
+   "alias": "safari_auto",
+   "alpn": null,
+   "ja3": "ecdf4f49dd59effc439639da29186671",
+   "ja4": "t13d2013h2_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d2013h2",
+   "name": "HelloSafari_Auto",
+   "no_sni": false,
+   "preset": "HelloSafari_Auto"
+  },
+  {
+   "alias": "safari_auto_h1",
+   "alpn": [
+    "http/1.1"
+   ],
+   "ja3": "751c36a881a6deea1cd3cc517b8fd81d",
+   "ja4": "t13d2013h1_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d2013h1",
+   "name": "HelloSafari_Auto_h1",
+   "no_sni": false,
+   "preset": "HelloSafari_Auto"
+  },
+  {
+   "alias": "safari_auto_noalpn",
+   "alpn": [],
+   "ja3": "64f30c7c07408ed3efa93e929d3413f6",
+   "ja4": "t13d201200_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13d201200",
+   "name": "HelloSafari_Auto_noalpn",
+   "no_sni": false,
+   "preset": "HelloSafari_Auto"
+  },
+  {
+   "alias": "safari_auto_nosni",
+   "alpn": null,
+   "ja3": "0ca3c3ef30e6e88f75aeb1fb33433d14",
+   "ja4": "t13i2012h2_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13i2012h2",
+   "name": "HelloSafari_Auto_nosni",
+   "no_sni": true,
+   "preset": "HelloSafari_Auto"
+  },
+  {
+   "alias": "safari_auto_nosni_noalpn",
+   "alpn": [],
+   "ja3": "67da18e09ee25349466cfeb361bbd36d",
+   "ja4": "t13i201100_a09f3c656075_7f0f34a4126d",
+   "ja4_a": "t13i201100",
+   "name": "HelloSafari_Auto_nosni_noalpn",
+   "no_sni": true,
+   "preset": "HelloSafari_Auto"
   }
  ]
 }

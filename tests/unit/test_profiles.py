@@ -13,8 +13,9 @@ def test_catalog_size():
 
 
 def test_known_aliases_exist():
-    for alias in ("chrome_133", "firefox_120", "safari_16_0", "edge_106",
-                  "ios_14", "android_11_okhttp", "golang"):
+    for alias in ("chrome_133", "chrome_155", "firefox_120", "firefox_148",
+                  "safari_16_0", "safari_26_3", "edge_106", "ios_14",
+                  "android_11_okhttp", "golang"):
         assert profiles.get(alias) is not None, alias
 
 

@@ -1,9 +1,9 @@
 module github.com/freetls/native
 
-go 1.24.0
+go 1.27.0
 
 require (
-	github.com/refraction-networking/utls v1.8.2
+	github.com/refraction-networking/utls v1.8.3-0.20261006195536-6ebdceb2607e
 	golang.org/x/net v0.38.0
 )
 

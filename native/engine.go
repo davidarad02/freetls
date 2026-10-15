@@ -69,49 +69,63 @@ type specJSON struct {
 
 // presetByName maps uTLS preset names to their ClientHelloIDs. This is the
 // authoritative catalogue of real client fingerprints shipped by uTLS.
+//
+// The "_Auto" entries always track uTLS's notion of the latest version.
 var presetByName = map[string]utls.ClientHelloID{
-	"HelloFirefox_55":                 utls.HelloFirefox_55,
-	"HelloFirefox_56":                 utls.HelloFirefox_56,
-	"HelloFirefox_63":                 utls.HelloFirefox_63,
-	"HelloFirefox_65":                 utls.HelloFirefox_65,
-	"HelloFirefox_99":                 utls.HelloFirefox_99,
-	"HelloFirefox_102":                utls.HelloFirefox_102,
-	"HelloFirefox_105":                utls.HelloFirefox_105,
-	"HelloFirefox_120":                utls.HelloFirefox_120,
-	"HelloChrome_58":                  utls.HelloChrome_58,
-	"HelloChrome_62":                  utls.HelloChrome_62,
-	"HelloChrome_70":                  utls.HelloChrome_70,
-	"HelloChrome_72":                  utls.HelloChrome_72,
-	"HelloChrome_83":                  utls.HelloChrome_83,
-	"HelloChrome_87":                  utls.HelloChrome_87,
-	"HelloChrome_96":                  utls.HelloChrome_96,
-	"HelloChrome_100":                 utls.HelloChrome_100,
-	"HelloChrome_102":                 utls.HelloChrome_102,
-	"HelloChrome_106_Shuffle":         utls.HelloChrome_106_Shuffle,
-	"HelloChrome_100_PSK":             utls.HelloChrome_100_PSK,
-	"HelloChrome_112_PSK_Shuf":        utls.HelloChrome_112_PSK_Shuf,
-	"HelloChrome_114_Padding_PSK_Shuf": utls.HelloChrome_114_Padding_PSK_Shuf,
-	"HelloChrome_115_PQ":              utls.HelloChrome_115_PQ,
-	"HelloChrome_115_PQ_PSK":          utls.HelloChrome_115_PQ_PSK,
-	"HelloChrome_120":                 utls.HelloChrome_120,
-	"HelloChrome_120_PQ":              utls.HelloChrome_120_PQ,
-	"HelloChrome_131":                 utls.HelloChrome_131,
-	"HelloChrome_133":                 utls.HelloChrome_133,
-	"HelloIOS_11_1":                   utls.HelloIOS_11_1,
-	"HelloIOS_12_1":                   utls.HelloIOS_12_1,
-	"HelloIOS_13":                     utls.HelloIOS_13,
-	"HelloIOS_14":                     utls.HelloIOS_14,
-	"HelloAndroid_11_OkHttp":          utls.HelloAndroid_11_OkHttp,
-	"HelloEdge_85":                    utls.HelloEdge_85,
-	"HelloEdge_106":                   utls.HelloEdge_106,
-	"HelloSafari_16_0":                utls.HelloSafari_16_0,
-	"Hello360_7_5":                    utls.Hello360_7_5,
-	"Hello360_11_0":                   utls.Hello360_11_0,
-	"HelloQQ_11_1":                    utls.HelloQQ_11_1,
-	"HelloGolang":                     utls.HelloGolang,
-	"HelloRandomized":                 utls.HelloRandomized,
-	"HelloRandomizedALPN":             utls.HelloRandomizedALPN,
-	"HelloRandomizedNoALPN":           utls.HelloRandomizedNoALPN,
+	// Firefox
+	"HelloFirefox_55":   utls.HelloFirefox_55,
+	"HelloFirefox_56":   utls.HelloFirefox_56,
+	"HelloFirefox_63":   utls.HelloFirefox_63,
+	"HelloFirefox_65":   utls.HelloFirefox_65,
+	"HelloFirefox_99":   utls.HelloFirefox_99,
+	"HelloFirefox_102":  utls.HelloFirefox_102,
+	"HelloFirefox_105":  utls.HelloFirefox_105,
+	"HelloFirefox_120":  utls.HelloFirefox_120,
+	"HelloFirefox_148":  utls.HelloFirefox_148,
+	"HelloFirefox_Auto": utls.HelloFirefox_Auto,
+	// Chrome
+	"HelloChrome_58":          utls.HelloChrome_58,
+	"HelloChrome_62":          utls.HelloChrome_62,
+	"HelloChrome_70":          utls.HelloChrome_70,
+	"HelloChrome_72":          utls.HelloChrome_72,
+	"HelloChrome_83":          utls.HelloChrome_83,
+	"HelloChrome_87":          utls.HelloChrome_87,
+	"HelloChrome_96":          utls.HelloChrome_96,
+	"HelloChrome_100":         utls.HelloChrome_100,
+	"HelloChrome_102":         utls.HelloChrome_102,
+	"HelloChrome_106_Shuffle": utls.HelloChrome_106_Shuffle,
+	"HelloChrome_115_PQ":      utls.HelloChrome_115_PQ,
+	"HelloChrome_120":         utls.HelloChrome_120,
+	"HelloChrome_120_PQ":      utls.HelloChrome_120_PQ,
+	"HelloChrome_131":         utls.HelloChrome_131,
+	"HelloChrome_133":         utls.HelloChrome_133,
+	"HelloChrome_155":         utls.HelloChrome_155,
+	"HelloChrome_Auto":        utls.HelloChrome_Auto,
+	// iOS / Android
+	"HelloIOS_11_1":          utls.HelloIOS_11_1,
+	"HelloIOS_12_1":          utls.HelloIOS_12_1,
+	"HelloIOS_13":            utls.HelloIOS_13,
+	"HelloIOS_14":            utls.HelloIOS_14,
+	"HelloIOS_Auto":          utls.HelloIOS_Auto,
+	"HelloAndroid_11_OkHttp": utls.HelloAndroid_11_OkHttp,
+	// Edge
+	"HelloEdge_85":   utls.HelloEdge_85,
+	"HelloEdge_106":  utls.HelloEdge_106,
+	"HelloEdge_Auto": utls.HelloEdge_Auto,
+	// Safari
+	"HelloSafari_16_0": utls.HelloSafari_16_0,
+	"HelloSafari_26_3": utls.HelloSafari_26_3,
+	"HelloSafari_Auto": utls.HelloSafari_Auto,
+	// Others
+	"Hello360_7_5":          utls.Hello360_7_5,
+	"Hello360_11_0":         utls.Hello360_11_0,
+	"Hello360_Auto":         utls.Hello360_Auto,
+	"HelloQQ_11_1":          utls.HelloQQ_11_1,
+	"HelloQQ_Auto":          utls.HelloQQ_Auto,
+	"HelloGolang":           utls.HelloGolang,
+	"HelloRandomized":       utls.HelloRandomized,
+	"HelloRandomizedALPN":   utls.HelloRandomizedALPN,
+	"HelloRandomizedNoALPN": utls.HelloRandomizedNoALPN,
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +219,7 @@ type session struct {
 
 var (
 	regMu    sync.Mutex
-	registry = map[int64]*session{}
+	registry       = map[int64]*session{}
 	nextID   int64 = 1
 )
 
@@ -387,14 +401,14 @@ func freetls_ping() C.int {
 // dummyConn is a no-op net.Conn used to build a ClientHello without any I/O.
 type dummyConn struct{}
 
-func (dummyConn) Read(b []byte) (int, error)            { return 0, errors.New("no io") }
-func (dummyConn) Write(b []byte) (int, error)           { return 0, errors.New("no io") }
-func (dummyConn) Close() error                          { return nil }
-func (dummyConn) LocalAddr() net.Addr                   { return nil }
-func (dummyConn) RemoteAddr() net.Addr                  { return nil }
-func (dummyConn) SetDeadline(time.Time) error           { return nil }
-func (dummyConn) SetReadDeadline(time.Time) error       { return nil }
-func (dummyConn) SetWriteDeadline(time.Time) error      { return nil }
+func (dummyConn) Read(b []byte) (int, error)       { return 0, errors.New("no io") }
+func (dummyConn) Write(b []byte) (int, error)      { return 0, errors.New("no io") }
+func (dummyConn) Close() error                     { return nil }
+func (dummyConn) LocalAddr() net.Addr              { return nil }
+func (dummyConn) RemoteAddr() net.Addr             { return nil }
+func (dummyConn) SetDeadline(time.Time) error      { return nil }
+func (dummyConn) SetReadDeadline(time.Time) error  { return nil }
+func (dummyConn) SetWriteDeadline(time.Time) error { return nil }
 
 // freetls_preset_raw builds a preset's ClientHello offline and returns the raw
 // handshake message as hex (empty string on error). No network is used.
