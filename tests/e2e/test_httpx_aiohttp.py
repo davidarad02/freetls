@@ -1,8 +1,8 @@
 """End-to-end tests for the httpx and aiohttp transports."""
+
 from __future__ import annotations
 
 import asyncio
-import socket
 
 import pytest
 

@@ -30,7 +30,9 @@ Issues = "https://github.com/freetls/freetls/issues"
 http = ["requests>=2.28", "urllib3>=2.0"]
 async = ["httpx>=0.24", "aiohttp>=3.8"]
 pki = ["cryptography>=41"]
-test = ["pytest>=7", "pytest-cov>=4", "scapy>=2.5", "requests>=2.28", "httpx>=0.24", "aiohttp>=3.8", "cryptography>=41"]
+content = ["brotli>=1.1", "zstandard>=0.22"]
+dev = ["ruff>=0.6", "black>=24", "mypy>=1.10"]
+test = ["pytest>=7", "pytest-cov>=4", "scapy>=2.5", "requests>=2.28", "httpx>=0.24", "aiohttp>=3.8", "cryptography>=41", "brotli>=1.1", "zstandard>=0.22"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -40,6 +42,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
+"freetls" = ["py.typed"]
 "freetls.fingerprint.tables" = ["*.json"]
 "freetls.profiles" = ["*.json"]
 "freetls._lib" = ["*.so", "*.dylib", "*.dll"]
@@ -64,3 +67,29 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = ["native", "build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501", "B008"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = false
+files = ["src/freetls"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests insert the tests dir on sys.path before importing helpers, and assert
+# on broad exceptions from cryptography.
+"tests/**" = ["E402", "B017"]

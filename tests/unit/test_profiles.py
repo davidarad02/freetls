@@ -1,7 +1,7 @@
 """Unit tests for the common-JA4 profile catalog."""
+
 from __future__ import annotations
 
-import freetls
 from freetls import engine, profiles
 from freetls.fingerprint import ja4_from_bytes
 
@@ -13,9 +13,18 @@ def test_catalog_size():
 
 
 def test_known_aliases_exist():
-    for alias in ("chrome_133", "chrome_155", "firefox_120", "firefox_148",
-                  "safari_16_0", "safari_26_3", "edge_106", "ios_14",
-                  "android_11_okhttp", "golang"):
+    for alias in (
+        "chrome_133",
+        "chrome_155",
+        "firefox_120",
+        "firefox_148",
+        "safari_16_0",
+        "safari_26_3",
+        "edge_106",
+        "ios_14",
+        "android_11_okhttp",
+        "golang",
+    ):
         assert profiles.get(alias) is not None, alias
 
 
@@ -37,7 +46,6 @@ def test_variant_specs():
 
 def test_every_profile_reproduces_its_ja4():
     """Offline determinism: each catalog entry's spec yields its stored JA4."""
-    engine_lib = engine  # ensure loaded
     checked = 0
     for prof in profiles.list_profiles():
         if prof.chlo_json is not None:

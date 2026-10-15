@@ -6,6 +6,7 @@ Provides:
 - the native engine library (built on demand if Go is available),
 - a capability-bearing tcpdump locator for pcap tests.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 NATIVE = ROOT / "native"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _default_verify_off():
+    """The suite talks to self-signed local servers, so relax the secure default."""
+    import freetls
+
+    freetls.set_default_verify(False)
+    yield
+    freetls.set_default_verify(True)
 
 
 def _lib_name() -> str:
@@ -81,10 +92,22 @@ def certs(tmp_path_factory) -> tuple[str, str]:
     key = d / "key.pem"
     subprocess.run(
         [
-            "openssl", "req", "-x509", "-newkey", "rsa:2048",
-            "-keyout", str(key), "-out", str(cert),
-            "-days", "2", "-nodes", "-subj", "/CN=localhost",
-            "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-keyout",
+            str(key),
+            "-out",
+            str(cert),
+            "-days",
+            "2",
+            "-nodes",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
         ],
         check=True,
         capture_output=True,
@@ -97,7 +120,7 @@ class TLSServer:
         self.proc = proc
         self.port = port
 
-    def __enter__(self) -> "TLSServer":
+    def __enter__(self) -> TLSServer:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -112,12 +135,22 @@ class TLSServer:
                 self.proc.kill()
 
 
-def start_tls_server(certs: tuple[str, str], version: str = "tls1_3", seclevel0: bool = False) -> TLSServer:
+def start_tls_server(
+    certs: tuple[str, str], version: str = "tls1_3", seclevel0: bool = False
+) -> TLSServer:
     cert, key = certs
     port = _free_port()
     args = [
-        "openssl", "s_server", "-accept", str(port),
-        "-cert", cert, "-key", key, "-www", "-quiet",
+        "openssl",
+        "s_server",
+        "-accept",
+        str(port),
+        "-cert",
+        cert,
+        "-key",
+        key,
+        "-www",
+        "-quiet",
     ]
     if version != "auto":
         args.append(f"-{version}")
@@ -183,8 +216,11 @@ def go_server(certs, tmp_path_factory):
     env.setdefault("GOPATH", os.path.expanduser("~/go"))
     subprocess.run([go, "build", "-o", str(binary), "."], cwd=src, check=True, env=env)
     port = _free_port()
-    proc = subprocess.Popen([str(binary), f"127.0.0.1:{port}", cert, key],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        [str(binary), f"127.0.0.1:{port}", cert, key],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     for _ in range(50):
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.2):

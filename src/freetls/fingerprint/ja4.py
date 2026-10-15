@@ -2,6 +2,7 @@
 
 Reference: https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md
 """
+
 from __future__ import annotations
 
 from hashlib import sha256
@@ -114,6 +115,8 @@ _KIND_ID = {
     "status_request": 0x0005,
     "sct": 0x0012,
     "compress_certificate": 0x001B,
+    "record_size_limit": 0x001C,
+    "pre_shared_key": 0x0029,
     "padding": 0x0015,
     "application_settings": 0x4469,
 }
@@ -121,13 +124,13 @@ _KIND_ID = {
 
 def spec_to_client_hello(spec):
     """Build a synthetic ClientHello from a FingerprintSpec (offline JA4)."""
-    from .parse import ClientHello, Extension as PExt
+    from .parse import ClientHello
+    from .parse import Extension as PExt
 
     exts = []
     sig_algs = []
     supported_versions = []
     alpn = []
-    has_sni = False
     for e in spec.extensions:
         if e.kind == "generic":
             exts.append(PExt(e.id, b""))
@@ -138,16 +141,13 @@ def spec_to_client_hello(spec):
         if ext_id is None:
             continue
         exts.append(PExt(ext_id, b""))
-        if e.kind == "sni" and e.server_name:
-            has_sni = True
-        elif e.kind == "signature_algorithms":
+        if e.kind == "signature_algorithms":
             sig_algs = list(e.values)
         elif e.kind == "supported_versions":
             supported_versions = list(e.values)
         elif e.kind == "alpn":
             alpn = list(e.strings)
     if spec.server_name is None:
-        has_sni = False
         exts = [x for x in exts if x.type != 0]
     ch = ClientHello(
         legacy_version=spec.vers_max,

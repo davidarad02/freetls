@@ -4,9 +4,12 @@ See :mod:`freetls.engine._cffi` for the implementation. This package exposes a
 small, stable surface: the library version, preset helpers, and the session
 handle wrapper.
 """
+
 from ._cffi import (
     EngineSession,
     EngineState,
+    abi_version,
+    active_sessions,
     chlo_raw,
     preset_list,
     preset_raw,
@@ -18,8 +21,10 @@ __all__ = [
     "EngineSession",
     "EngineState",
     "version",
+    "abi_version",
     "preset_list",
     "preset_raw",
     "preset_raw_opts",
     "chlo_raw",
+    "active_sessions",
 ]

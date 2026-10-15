@@ -1,4 +1,5 @@
 """TLS version matrix: 1.0, 1.1, 1.2, 1.3 handshakes."""
+
 from __future__ import annotations
 
 import pytest
@@ -8,9 +9,7 @@ from freetls import modes
 
 
 def _spec(minv, maxv):
-    return modes.baseline_spec(
-        server_name="localhost", vers_min=minv, vers_max=maxv
-    )
+    return modes.baseline_spec(server_name="localhost", vers_min=minv, vers_max=maxv)
 
 
 def test_tls13(tls_server_13):

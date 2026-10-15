@@ -1,11 +1,13 @@
 """Unit tests for the named constants (enums) and name coercion."""
+
 from __future__ import annotations
 
 import pytest
+
 from freetls import (
     Cipher,
-    ExtensionType,
     Extension,
+    ExtensionType,
     NamedGroup,
     SignatureScheme,
     modes,

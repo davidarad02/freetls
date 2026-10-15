@@ -1,4 +1,5 @@
 """HTTP/2 (Go-side) fingerprint-control tests against a local Go h2 server."""
+
 from __future__ import annotations
 
 import freetls
@@ -32,7 +33,10 @@ def test_h2_settings_reported(go_server):
     with _connect(go_server.port, _h2_spec()) as s:
         r = s.h2_request("/")
     assert [(x["id"], x["value"]) for x in r["sent_settings"]] == [
-        (1, 65536), (2, 0), (4, 6291456), (6, 262144)
+        (1, 65536),
+        (2, 0),
+        (4, 6291456),
+        (6, 262144),
     ]
     assert r["sent_window_update"] == 15663105
     assert r["sent_pseudo_header_order"] == ["method", "authority", "scheme", "path"]

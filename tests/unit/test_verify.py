@@ -1,10 +1,12 @@
 """Unit tests for self-verification helpers."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import _build as B
 import pytest
+
 from freetls import verify
 from freetls.errors import FingerprintError
 from freetls.fingerprint import ja3_from_bytes, ja4_from_bytes, ja4s_from_bytes

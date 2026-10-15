@@ -8,6 +8,7 @@ description is not "Unassigned"/"Reserved"). This is the freetls value universe.
 Network is used only at generation time; the generated tables are committed so
 the library runtime never needs the network.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,9 +32,7 @@ SOURCES = {
 }
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.normpath(
-    os.path.join(HERE, "..", "src", "freetls", "fingerprint", "tables")
-)
+OUT_DIR = os.path.normpath(os.path.join(HERE, "..", "src", "freetls", "fingerprint", "tables"))
 
 
 def fetch(url: str, local_dir: str | None) -> str:

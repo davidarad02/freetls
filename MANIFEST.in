@@ -10,9 +10,10 @@ recursive-include native *.go go.mod go.sum
 
 include tools/gen_tables.py
 include tools/gen_catalog.py
+include tools/gen_presets.py
 recursive-include scripts *.sh
 
-recursive-include tests *.py *.cnf go.mod
+recursive-include tests *.py *.cnf *.go go.mod
 
 # Data shipped inside the package (also listed as package-data).
 recursive-include src/freetls/fingerprint/tables *.json

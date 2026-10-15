@@ -1,10 +1,11 @@
 """Unit tests for the fingerprint core (parser, JA4, JA3, JA4S)."""
+
 from __future__ import annotations
 
 import _build as B
 import pytest
+
 from freetls.fingerprint import (
-    first_last_alpn,
     ja3_from_bytes,
     ja4_from_bytes,
     ja4s_from_bytes,
@@ -57,8 +58,7 @@ def test_grease_is_excluded_from_ja4():
 def test_ja4_a_version_and_counts():
     raw = B.build_client_hello(
         [0x1301] * 3,
-        [B.sni_ext("a.com"), B.alpn_ext("http/1.1"),
-         B.supported_versions_ext(0x0304)],
+        [B.sni_ext("a.com"), B.alpn_ext("http/1.1"), B.supported_versions_ext(0x0304)],
     )
     out = ja4_from_bytes(raw)
     a = out["ja4_a"]
@@ -70,9 +70,7 @@ def test_ja4_a_version_and_counts():
 
 
 def test_sni_absent_is_i():
-    raw = B.build_client_hello(
-        [0x1301], [B.supported_versions_ext(0x0304)]
-    )
+    raw = B.build_client_hello([0x1301], [B.supported_versions_ext(0x0304)])
     out = ja4_from_bytes(raw)
     assert out["sni"] == "i"
     assert out["ja4_a"][3] == "i"

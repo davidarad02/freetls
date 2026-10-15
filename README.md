@@ -17,7 +17,9 @@ Highlights:
 - Real **TLS 1.0–1.3** handshakes (completed where the server allows); no SSLv3.
 - A catalog of **220 common-JA4 profiles** derived from uTLS's real, current
   browser presets (Chrome up to 155, Firefox 148, Safari 26.3, Edge, iOS, Android/OkHttp, 360, QQ, Go).
-- Drop-in **requests**, **httpx** (sync + async) and **aiohttp** transports.
+- Drop-in **requests**, **httpx** (sync + async) and **aiohttp** transports;
+  requests and httpx select **HTTP/2 automatically via ALPN** (aiohttp is
+  HTTP/1.1-only and offers a safe ALPN).
 - An `ssl.SSLContext`-style `wrap_socket()` API.
 - Go-side **HTTP/2** with controllable SETTINGS / WINDOW_UPDATE / pseudo-header
   order.
@@ -41,6 +43,7 @@ third-party fingerprint services.
   - [The spec model](#the-spec-model)
 - [HTTP/2](#http2)
 - [Certificate verification](#certificate-verification)
+- [Timeouts](#timeouts)
 - [Self-verification](#self-verification)
 - [API reference](#api-reference)
 - [Understanding the fingerprints](#understanding-the-fingerprints)
@@ -69,6 +72,7 @@ pip install freetls            # runtime core (wheel bundles the engine)
 pip install "freetls[http]"    # + requests / urllib3
 pip install "freetls[async]"   # + httpx / aiohttp
 pip install "freetls[pki]"     # + cryptography (Python cert parity)
+pip install "freetls[content]" # + brotli / zstandard content decoding
 pip install "freetls[test]"    # everything needed to run the test suite
 ```
 
@@ -228,6 +232,59 @@ extensions a server safely ignores (`modes.SAFE_PADDING_EXT_IDS`).
 | `partial_random` | baseline + counts of random padding | large | yes |
 | `true_random` | random counts over the whole assigned universe | maximal | yes (minimal core) |
 
+### GREASE & padding control
+
+GREASE (RFC 8701) code points make a ClientHello look browser-like; servers
+ignore them, and JA4/JA3 exclude them by value. `modes.GREASE_VALUES` holds the
+16 reserved values.
+
+```python
+from freetls import modes, Extension
+
+# Inject GREASE into the cipher/group/version slots + a GREASE extension.
+spec = modes.baseline_spec(server_name="example.com", grease=True, seed=1)
+
+# Or add it to an existing spec with fine-grained control.
+modes.add_grease(spec, ciphers=True, groups=True, versions=True,
+                 extensions=True, strategy="fixed")   # "random" (default) or "fixed"
+
+# Padding: fixed byte length, or uTLS's Boring-style heuristic (no argument).
+spec.extensions.append(Extension.padding(300))
+spec.extensions.append(Extension.padding())
+```
+
+### TLS response extras & resumption
+
+```python
+from freetls import modes, Extension
+from freetls.model import TLS12
+
+spec = modes.baseline_spec(server_name="example.com")
+spec.compression = [0]                                  # legacy compression method
+spec.extensions.append(Extension.record_size_limit(16385))
+spec.extensions.append(Extension.application_settings("h2"))   # ALPS
+
+# Session resumption: enable the shared client session cache and keep the
+# resumption extension. TLS 1.2 uses session_ticket, TLS 1.3 pre_shared_key
+# (place it last). session.did_resume reports whether the handshake resumed.
+spec.session_cache = 32
+spec.extensions.append(Extension("session_ticket"))
+
+# TLS 1.3:
+tls13 = modes.baseline_spec(server_name="example.com")
+tls13.session_cache = 32
+tls13.extensions.append(Extension.pre_shared_key())
+
+session = ...                                          # after handshake
+session.did_resume                                     # bool
+session.ocsp_response                                  # stapled OCSP (bytes)
+session.signed_certificate_timestamps                  # list[bytes]
+session.peer_application_settings                      # ALPS payload (bytes)
+```
+
+`did_resume` is available on a `TLSSession`; the OCSP/SCT/ALPS accessors return
+empty values when the peer did not provide them.
+
 ### Named constants (no hex needed)
 
 freetls ships importable `IntEnum`s built from the IANA tables, so you never
@@ -288,6 +345,34 @@ The catalog is generated from the uTLS version pinned in `native/go.mod`:
 build), and `tools/gen_catalog.py` enumerates the profiles. Run `make gen` after
 bumping uTLS. The `_Auto` aliases (`chrome_auto`, `firefox_auto`,
 `safari_auto`, …) always track uTLS's latest version.
+
+#### Search, export and HTTP/2 bundles
+
+```python
+from freetls import profiles
+
+profiles.find_ja4("t13d1516h2_8daaf6152771")   # match by JA4 (exact/prefix/substr)
+profiles.search("chrome")                      # match by name/alias/JA3
+
+profiles.export()                              # list[dict] of all profiles
+profiles.save_file("my_profiles.json")         # JSON loadable by load_file()
+profiles.load_file("my_profiles.json")
+
+# A profile spec with per-profile HTTP/2 controls applied:
+spec = profiles.h2_bundle("chrome_155",
+                          settings=[[1, 65536], [4, 131072]],
+                          window_update=15663105,
+                          pseudo_header_order=["method", "authority", "scheme", "path"])
+```
+
+A captured ClientHello can be converted back into a uTLS `ClientHelloSpec`
+document (so it can be replayed as `FingerprintSpec(chlo_json=...)`):
+
+```python
+from freetls.fingerprint import chlo_json_from_raw
+
+spec = freetls.FingerprintSpec(chlo_json=chlo_json_from_raw(captured_hello_bytes))
+```
 
 ### Custom & registered profiles
 
@@ -402,15 +487,85 @@ a dict: `status`, `headers`, `body`, `body_b64`, and the `sent_*` fields echoing
 exactly what was placed on the wire. Set `alpn=["h2"]` (or include it) so the
 server negotiates HTTP/2.
 
+### HTTP/2 through the transports
+
+When a transport offers `h2` in ALPN and the server selects it, the request is
+executed with the Go HTTP/2 client (controllable SETTINGS/pseudo-header order
+and all). Otherwise the transport speaks HTTP/1.1:
+
+```python
+# requests / httpx: HTTP/2 is chosen automatically when the server negotiates it
+spec = modes.baseline_spec(server_name="example.com", alpn=["h2", "http/1.1"])
+s = requests.Session()
+adapter = freetls.JA4Adapter(spec=spec)
+s.mount("https://", adapter)
+r = s.get("https://example.com/")
+print(adapter.last_session.selected_alpn_protocol())   # "h2" when negotiated
+```
+
+## Streaming & content decoding
+
+The httpx transports stream response bodies (HTTP/1.1 chunk-by-chunk, HTTP/2 as
+a single body frame) and the aiohttp connector feeds data to the event loop as
+it arrives, so `client.stream(...)` / `iter_chunked(...)` work and the loop is
+never blocked:
+
+```python
+import httpx
+from freetls import modes
+from freetls.transport.httpx_transport import FreeTLSTransport
+
+t = FreeTLSTransport(spec=modes.baseline_spec(server_name="example.com"))
+with httpx.Client(transport=t) as c:
+    with c.stream("GET", "https://example.com/") as r:
+        for chunk in r.iter_raw():        # incremental bytes
+            ...
+```
+
+`gzip`, `deflate`, `brotli` and `zstd` bodies are decoded transparently
+(`brotli`/`zstd` require the optional `freetls[content]` extra; httpx also
+decodes them itself when its extras are installed).
+
+### Server-Sent Events
+
+`freetls.sse.iter_sse` parses a `text/event-stream` byte iterable into
+`SSEEvent` objects (`data`/`event`/`id`/`retry`, comment handling, multi-line
+data):
+
+```python
+import freetls
+
+with c.stream("GET", "https://example.com/events") as r:
+    for ev in freetls.sse.iter_sse(r.iter_bytes()):
+        print(ev.event, ev.data)
+```
+
+- **requests** and **httpx** (sync + async) auto-select H2 via ALPN.
+- **aiohttp** is HTTP/1.1-only, so `FreeTLSConnector` strips `h2` from the
+  offered ALPN (preventing an HTTP/1.1-on-H2 mismatch). Use the httpx async
+  transport when you need HTTP/2.
+- httpx exposes the negotiated version as `transport.last_http_version`.
+- The async transports run the blocking engine call in a worker thread, so the
+  asyncio event loop is never blocked.
+
 ---
 
 ## Certificate verification
 
-The engine verifies with Go `crypto/x509`. Control it through the spec:
+The engine verifies with Go `crypto/x509`. **Verification is on by default**
+(secure by default, like `requests`/`ssl`):
 
 ```python
-spec = modes.baseline_spec(server_name="example.com", verify=True)
-spec.root_ca = "/path/to/ca.pem"     # system roots are used when omitted
+spec = modes.baseline_spec(server_name="example.com")   # verify defaults to True
+spec.root_ca = "/path/to/ca.pem"                         # system roots when omitted
+```
+
+For local self-signed servers, opt out explicitly per spec
+(`verify=False`) or globally:
+
+```python
+import freetls
+freetls.set_default_verify(False)   # e.g. in tests / fingerprinting labs
 ```
 
 > **Important:** for the freetls transports (`JA4Adapter`,
@@ -419,10 +574,66 @@ spec.root_ca = "/path/to/ca.pem"     # system roots are used when omitted
 > argument. The libraries' `verify=` no longer controls the handshake because
 > the freetls engine does the TLS. Set verification on the spec.
 
-An optional Python (`cryptography`) parity hook is available for independently
-validating the peer's leaf certificate (see [Self-verification](#self-verification)).
+Access the peer certificate chain with
+`session.getpeercert(binary_form=True)` (DER bytes; the leaf), and an optional
+Python (`cryptography`) parity hook for independent validation (see
+[Self-verification](#self-verification)).
+
+### Trust, pinning and mTLS
+
+The full certificate suite is configured on the spec (or via `TLSContext`):
+
+```python
+spec = modes.baseline_spec(server_name="example.com")
+spec.verify = True
+spec.system_roots = False            # don't use the OS trust store
+spec.root_ca = "/path/ca.pem"        # PEM file
+spec.ca_dir = "/path/ca.d"           # directory of PEM certs
+spec.cadata = "-----BEGIN CERTIFICATE-----\n..."   # inline PEM bundle
+spec.check_hostname = False          # verify the chain but not the name
+
+spec.pinned_sha256 = ["<base64 sha256 of leaf DER or SPKI>"]  # pinning
+
+spec.client_cert = "/path/client.pem"    # mTLS (files) ...
+spec.client_key = "/path/client.key"
+spec.client_cert_pem = "<PEM text>"      # ... or inline PEM
+spec.client_key_pem = "<PEM text>"
+```
+
+Equivalent `TLSContext` helpers: `set_verify`, `set_check_hostname`,
+`set_system_roots`, `load_verify_locations(cafile, capath, cadata)`,
+`set_client_cert(cert, key, cert_pem=..., key_pem=...)`,
+`set_pinned_sha256(pins)`.
+
+Inspect the peer chain:
+
+```python
+session.getpeercert(binary_form=True)   # leaf DER bytes
+session.getpeercert()                   # dict (subject/issuer/SAN/…) via cryptography
+session.peer_chain()                    # list[DER], leaf first
+```
 
 ---
+
+## Timeouts
+
+Timeouts bound the TLS engine's I/O (not just the TCP socket):
+
+```python
+with freetls.TLSSession(modes.baseline_spec(server_name="example.com")) as s:
+    s.connect("example.com", 443, timeout=5)   # TCP + handshake
+    s.settimeout(2.0)                           # subsequent reads/writes
+    s.recv(4096)                                # raises FreeTLSError on timeout
+```
+
+- `connect(timeout=...)` covers TCP connect **and** the TLS handshake.
+- `settimeout(seconds)` (None = block forever) applies to subsequent reads and
+  writes; `gettimeout()` returns the current value.
+- A read/write that exceeds the timeout raises `FreeTLSError` (not a silent
+  `b""`).
+- Sessions are **blocking-only**: `setblocking(False)` raises
+  `NotImplementedError`; `pending()` always returns `0` (uTLS does not expose
+  buffered counts).
 
 ## Self-verification
 
@@ -471,20 +682,30 @@ session.server_hello    # bytes: the ServerHello received (for JA4S)
 `TLSSession(spec)`; connect with `connect(host, port=443, timeout=None, server_hostname=None)`
 or `wrap_socket(sock, server_hostname)`.
 
-- I/O: `sendall`, `send`, `recv`, `makefile("rb")`, `settimeout`, `gettimeout`,
-  `fileno`, `shutdown`, `close`, context manager, `closed`.
+- I/O: `sendall`, `send`, `recv`, `recv_into`, `makefile("rb")`, `settimeout`,
+  `gettimeout`, `setblocking` (blocking-only), `fileno`, `getpeername`,
+  `getsockname`, `pending`, `sendfile`, `shutdown`, `close`, context manager,
+  `closed`. `recv`/`send` propagate errors (an engine failure raises
+  `FreeTLSError`; only a clean EOF returns `b""`).
+- Handshake: `connect(...)` / `wrap_socket(...)` / `do_handshake()` (deferred
+  handshakes via `wrap_socket(..., do_handshake_on_connect=False)`).
 - Fingerprints: `ja4`, `ja4_r`, `ja3`, `ja4s`, `fingerprints`, `client_hello`,
   `server_hello`.
-- TLS info: `version()`, `cipher()`, `selected_alpn_protocol()`,
-  `server_hostname()`, `getpeercert()` (returns `None`; use `state.peer_cert_der`),
-  `state`.
+- TLS info: `version()`, `cipher()` (an `ssl`-shaped `(name, protocol, bits)`
+  tuple), `selected_alpn_protocol()`, `server_hostname()`,
+  `getpeercert(binary_form=True)` (DER bytes), `state`.
+- Response extras: `did_resume`, `ocsp_response`, `signed_certificate_timestamps`,
+  `peer_application_settings`.
 - HTTP/2: `h2_request(...)`.
 
 ### `TLSContext`
 
 `TLSContext(spec=None)` or classmethods `baseline/specific/partial_random/true_random(**kwargs)`.
 Config: `set_ciphers`, `set_alpn_protocols` / `set_alpn`, `set_versions(min, max)`,
-`set_server_name`, `set_verify(verify, root_ca=None)`, `load_verify_locations(cafile)`.
+`set_server_name`, `set_verify(verify, root_ca=None)`, `set_check_hostname`,
+`set_system_roots`, `load_verify_locations(cafile=None, capath=None, cadata=None)`,
+`set_client_cert(cert=None, key=None, *, cert_pem=None, key_pem=None)`,
+`set_pinned_sha256(pins)`.
 `wrap_socket(sock, server_hostname=None, do_handshake_on_connect=True)` returns a
 `TLSSession`.
 
@@ -493,12 +714,15 @@ Config: `set_ciphers`, `set_alpn_protocols` / `set_alpn`, `set_versions(min, max
 ```python
 baseline_spec(server_name=None, ciphers=None, alpn=DEFAULT_ALPN,
               sigalgs=DEFAULT_SIGALGS, groups=DEFAULT_GROUPS,
-              vers_min=TLS12, vers_max=TLS13, verify=False)
+              vers_min=TLS12, vers_max=TLS13, verify=None,
+              grease=False, grease_strategy="random", seed=None)
 specific(ciphers=None, extensions=None, server_name=None, ...)
 partial_random(server_name=None, ciphers=None, alpn=..., vers_min=..., vers_max=...,
-               n_random_ciphers=10, n_random_extensions=8, seed=None, verify=False)
+               n_random_ciphers=10, n_random_extensions=8, seed=None, verify=None)
 true_random(server_name=None, alpn=..., vers_min=..., vers_max=...,
-            n_ciphers=60, n_extensions=40, seed=None, verify=False)
+            n_ciphers=60, n_extensions=40, seed=None, verify=None)
+add_grease(spec, ciphers=True, groups=True, versions=True, extensions=True,
+           strategy="random", seed=None)   # GREASE_VALUES: the 16 reserved codes
 ```
 
 ### `profiles`
@@ -507,11 +731,17 @@ true_random(server_name=None, alpn=..., vers_min=..., vers_max=...,
 profiles.names() -> list[str]
 profiles.list_profiles() -> list[Profile]      # built-in + registered
 profiles.get(name_or_alias) -> Profile | None
-profiles.spec(name_or_alias, server_name=None, verify=False) -> FingerprintSpec
+profiles.spec(name_or_alias, server_name=None, verify=None) -> FingerprintSpec
 profiles.catalog_info() -> {"count", "distinct_ja4", "registered", "total", ...}
 profiles.add_profile(name, *, alias=None, preset=None, chlo_json=None,
                      no_sni=False, alpn=None, ja4=None, ja3=None) -> Profile
 profiles.load_file(path) -> int                # register a JSON list of profiles
+profiles.find_ja4(query, *, limit=25) -> list[Profile]
+profiles.search(query, *, limit=25) -> list[Profile]
+profiles.export(profiles=None) -> list[dict]
+profiles.save_file(path, profiles=None) -> int
+profiles.h2_bundle(name, *, settings=None, window_update=None,
+                   pseudo_header_order=None, ...) -> FingerprintSpec
 ```
 
 ### Engine helpers — `freetls.engine`
@@ -538,6 +768,35 @@ verify.verify_peer_with_python(session, cafile, server_hostname=None)
 
 `ja4_from_bytes(raw)`, `ja3_from_bytes(raw)`, `ja4s_from_bytes(raw)`,
 `ja4_from_spec(spec)` (offline), `first_last_alpn(value)`, plus the raw parser.
+The JA4+ report-only calculators are exported both here and at the top level:
+`ja4x` / `ja4x_from_cert`, `ja4t` / `ja4ts`, `ja4l`, `ja4h` / `ja4h_from_request`.
+
+## JA4+ report-only calculators
+
+These recompute the corresponding FoxIO JA4+ layer from data you already have;
+freetls never spoofs them.
+
+```python
+import freetls
+
+# JA4X — X.509 structure, straight from the peer's leaf certificate.
+session.ja4x                                   # e.g. "1a2b3c4d5e6f_..._..."
+freetls.ja4x_from_cert(der_or_pem)             # offline
+freetls.ja4x(["2.5.4.3"], ["2.5.4.3"], ["2.5.29.17"])
+
+# JA4T / JA4TS — TCP SYN / SYN-ACK (window size, option kinds, MSS, window scale).
+freetls.ja4t(64240, [2, 4, 8, 1, 1, 4], 1460, 8)     # "64240_2-4-8-1-1-4_1460_8"
+freetls.ja4ts(65535, [2, 4, 8, 1, 3], 1460, 8)
+
+# JA4L / JA4LS — handshake latency + TTL.
+freetls.ja4l(t_a, t_b, t_c, client_ttl=64, server_ttl=64)   # {"ja4l_c":..., "ja4l_s":...}
+
+# JA4H — the HTTP request actually sent (reported on h2_request responses and on
+# the httpx transports as `last_ja4h`).
+freetls.ja4h("GET", [("Host", "x"), ("Accept", "*/*")], version="HTTP/1.1")
+resp = session.h2_request("/", headers=[["user-agent", "freetls"]])
+resp["ja4h"], resp["ja4h_r"], resp["ja4h_ro"]
+```
 
 ### Transports
 
@@ -547,6 +806,9 @@ verify.verify_peer_with_python(session, cafile, server_hostname=None)
 - `freetls.transport.urllib3_conn.Ja4HTTPSConnection` (the underlying urllib3
   connection class).
 
+Bodies are streamed; `freetls.sse.iter_sse(byte_iterable)` yields `SSEEvent`
+objects from a `text/event-stream` response.
+
 Pass a fixed `spec=` for a stable fingerprint, or `spec_factory=` (a callable
 returning a fresh spec per connection) for per-connection randomization:
 
@@ -555,6 +817,36 @@ adapter = freetls.JA4Adapter(
     spec_factory=lambda: modes.true_random(server_name="example.com")
 )
 ```
+
+### Proxies, retries and WebSocket
+
+Proxies (HTTP CONNECT, SOCKS5, SOCKS4/4a) tunnel the socket before the TLS
+handshake; pass `proxy=` to the httpx transports or use the session helper:
+
+```python
+spec = modes.baseline_spec(server_name="example.com")
+session = freetls.TLSSession(spec)
+session.connect_via_proxy("socks5://user:pass@127.0.0.1:1080", "example.com", 443)
+
+# httpx: FreeTLSTransport(spec=spec, proxy="http://127.0.0.1:8080")
+```
+
+`freetls.transport.retry.Retry` provides bounded exponential backoff with a
+retryable-status list, usable with any of the transports
+(`Retry(total=3).run(lambda: client.get(url), on_status=True)`).
+
+A minimal RFC 6455 client is available for WebSocket endpoints:
+
+```python
+from freetls.transport import websocket
+
+ws = websocket.connect(session, "example.com", "/socket")
+ws.send("hello")
+print(ws.recv())
+ws.close()
+```
+
+HTTP/3 / QUIC is intentionally not supported. `_http2` is the shared HTTP/2 path.
 
 ---
 
@@ -622,6 +914,25 @@ Go:      native/engine.go  +  native/httpx_h2.go
 - `native/httpx_h2.go` implements HTTP/2 over the same connection using
   `x/net/http2`'s Framer + HPACK, so the H2 fingerprint fields are explicit.
 
+### Thread safety and the engine ABI
+
+The native engine keeps a mutex-guarded session registry: all C entrypoints are
+safe to call from multiple threads, sessions are independent, and every
+entrypoint wraps its body in `recover()` so a Go panic becomes a Python error
+instead of aborting the host process. The C surface carries an ABI version
+(`engine.abi_version()`, currently `1`); the binding refuses to load an engine
+whose major version does not match, so a stale `libfreetls.so` fails loudly.
+
+A single `TLSSession` is **not** internally synchronised — use one session per
+thread (or the transports, which open a connection per request). Go fuzz and
+benchmark targets cover the spec JSON parser:
+
+```bash
+cd native && go test ./...                 # includes fuzz seeds + benchmarks
+cd native && go test -run '^$' -bench . ./...
+cd native && go test -run '^$' -fuzz FuzzParseSpec -fuzztime 30s
+```
+
 ---
 
 ## Development
@@ -636,8 +947,14 @@ make coverage    # enforce the 85% coverage gate
 make gen         # regenerate IANA tables + preset map + profile catalog
 make setup-caps  # one-time: make a local tcpdump capable of loopback capture
 make build       # build sdist + wheel into dist/
+make fmt         # format with black + ruff --fix
+make lint        # ruff check
+make typecheck   # mypy (src/freetls)
 cd native && go test ./...   # Go HTTP/2 wire test
 ```
+
+The package ships `py.typed` and is checked with ruff, black, and mypy
+(`pip install "freetls[dev]"`).
 
 `PY` and `GO` are overridable and auto-detected, so this works on any machine:
 
@@ -716,7 +1033,10 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
 
 ## Limitations
 
-- **JA4H is out of scope** (only JA4, JA3 and JA4S).
+- **JA4+ report-only variants** — JA4X, JA4T/JA4TS, JA4L/JA4LS and JA4H are
+  provided as *calculators* (see below). They report/recompute the corresponding
+  layer; freetls does not spoof or emit fake TCP/X.509/HTTP layers, and JA4SSH,
+  JA4D/JA4D6 and JA4N are not implemented.
 - **No SSLv3.** TLS 1.0/1.1 handshakes only complete against servers that still
   accept them; modern servers will refuse, as expected.
 - **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot

@@ -1,4 +1,5 @@
 """Large-range JA4 distinctness (offline, from specs)."""
+
 from __future__ import annotations
 
 import re

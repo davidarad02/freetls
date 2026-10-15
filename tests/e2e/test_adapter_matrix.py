@@ -1,4 +1,5 @@
 """Shared behavior matrix across requests, httpx, and aiohttp transports."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +7,6 @@ import warnings
 
 import pytest
 
-import freetls
 from freetls import modes
 
 

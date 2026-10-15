@@ -1,7 +1,8 @@
 """freetls: an HTTPS/TLS client with highly controllable JA4 fingerprints."""
+
 from __future__ import annotations
 
-from . import modes
+from . import modes, sse, verify
 from .constants import Cipher, ExtensionType, NamedGroup, SignatureScheme
 from .context import TLSContext
 from .engine import version as engine_version
@@ -15,7 +16,14 @@ from .errors import (
 from .fingerprint import (
     ja3_from_bytes,
     ja4_from_bytes,
+    ja4h,
+    ja4h_from_request,
+    ja4l,
     ja4s_from_bytes,
+    ja4t,
+    ja4ts,
+    ja4x,
+    ja4x_from_cert,
     parse_client_hello,
     parse_server_hello,
 )
@@ -26,9 +34,10 @@ from .model import (
     TLS13,
     Extension,
     FingerprintSpec,
+    get_default_verify,
+    set_default_verify,
 )
 from .session import TLSSession
-from . import verify
 
 __version__ = "0.0.1"
 
@@ -37,6 +46,8 @@ __all__ = [
     "engine_version",
     "FingerprintSpec",
     "Extension",
+    "set_default_verify",
+    "get_default_verify",
     "Cipher",
     "ExtensionType",
     "SignatureScheme",
@@ -45,6 +56,7 @@ __all__ = [
     "TLSContext",
     "modes",
     "verify",
+    "sse",
     "JA4Adapter",
     "transport",
     "ja4_from_bytes",
@@ -52,6 +64,13 @@ __all__ = [
     "ja4s_from_bytes",
     "parse_client_hello",
     "parse_server_hello",
+    "ja4x",
+    "ja4x_from_cert",
+    "ja4t",
+    "ja4ts",
+    "ja4l",
+    "ja4h",
+    "ja4h_from_request",
     "FreeTLSError",
     "EngineError",
     "SpecError",

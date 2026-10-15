@@ -3,14 +3,29 @@
 Parses raw handshake message bytes (starting at the handshake type byte) into
 the fields needed to compute JA4/JA3/JA4S fingerprints.
 """
+
 from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
 
 GREASE = {
-    0x0A0A, 0x1A1A, 0x2A2A, 0x3A3A, 0x4A4A, 0x5A5A, 0x6A6A, 0x7A7A,
-    0x8A8A, 0x9A9A, 0xAAAA, 0xBABA, 0xCACA, 0xDADA, 0xEAEA, 0xFAFA,
+    0x0A0A,
+    0x1A1A,
+    0x2A2A,
+    0x3A3A,
+    0x4A4A,
+    0x5A5A,
+    0x6A6A,
+    0x7A7A,
+    0x8A8A,
+    0x9A9A,
+    0xAAAA,
+    0xBABA,
+    0xCACA,
+    0xDADA,
+    0xEAEA,
+    0xFAFA,
 }
 
 
@@ -79,7 +94,7 @@ def _parse_extensions(buf: bytes) -> list[Extension]:
         off += 4
         if off + elen > len(buf):
             raise ParseError("extension overruns buffer")
-        exts.append(Extension(etype, buf[off:off + elen]))
+        exts.append(Extension(etype, buf[off : off + elen]))
         off += elen
     return exts
 
@@ -94,7 +109,7 @@ def _parse_alpn(data: bytes) -> list[str]:
     while off < end:
         n = data[off]
         off += 1
-        out.append(data[off:off + n].decode("latin-1"))
+        out.append(data[off : off + n].decode("latin-1"))
         off += n
     return out
 
@@ -110,7 +125,7 @@ def _parse_sni(data: bytes) -> list[str]:
     while off + 3 <= end:
         n = _u16(data, off + 1)
         off += 3
-        out.append(data[off:off + n].decode("latin-1"))
+        out.append(data[off : off + n].decode("latin-1"))
         off += n
     return out
 
@@ -140,7 +155,7 @@ def _handshake_body(raw: bytes, want_type: int) -> bytes:
     if len(raw) < 4:
         raise ParseError("truncated handshake header")
     length = int.from_bytes(raw[1:4], "big")
-    body = raw[4:4 + length]
+    body = raw[4 : 4 + length]
     if len(body) < length:
         raise ParseError("truncated handshake body")
     return body
@@ -157,7 +172,7 @@ def parse_client_hello(raw: bytes) -> ClientHello:
     off += 1 + sid_len
     cs_len = _u16(body, off)
     off += 2
-    cs = body[off:off + cs_len]
+    cs = body[off : off + cs_len]
     off += cs_len
     ch.ciphers = [_u16(cs, i) for i in range(0, len(cs) - 1, 2)]
     comp_len = body[off]
@@ -165,7 +180,7 @@ def parse_client_hello(raw: bytes) -> ClientHello:
     if off + 2 <= len(body):
         ext_len = _u16(body, off)
         off += 2
-        ch.extensions = _parse_extensions(body[off:off + ext_len])
+        ch.extensions = _parse_extensions(body[off : off + ext_len])
     for e in ch.extensions:
         if e.type == 0:  # server_name
             ch.server_names.extend(_parse_sni(e.data))
@@ -174,7 +189,7 @@ def parse_client_hello(raw: bytes) -> ClientHello:
         elif e.type == 11:  # ec_point_formats
             if e.data:
                 n = e.data[0]
-                ch.ec_point_formats = list(e.data[1:1 + n])
+                ch.ec_point_formats = list(e.data[1 : 1 + n])
         elif e.type == 13:  # signature_algorithms
             ch.sig_algs = _parse_u16_list(e.data, 2)
         elif e.type == 16:  # ALPN
@@ -200,7 +215,7 @@ def parse_server_hello(raw: bytes) -> ServerHello:
     if off + 2 <= len(body):
         ext_len = _u16(body, off)
         off += 2
-        sh.extensions = _parse_extensions(body[off:off + ext_len])
+        sh.extensions = _parse_extensions(body[off : off + ext_len])
     for e in sh.extensions:
         if e.type == 16:
             sh.alpn_list = _parse_alpn(e.data)

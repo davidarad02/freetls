@@ -9,13 +9,13 @@ name or from a full uTLS ``ClientHelloSpec`` JSON document — with
 :func:`add_profile` / :func:`load_file`, so new/arbitrary fingerprints need no
 code changes.
 """
+
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _CATALOG = os.path.join(_DIR, "catalog.json")
@@ -25,15 +25,15 @@ _CATALOG = os.path.join(_DIR, "catalog.json")
 class Profile:
     name: str
     alias: str
-    preset: Optional[str] = None
+    preset: str | None = None
     no_sni: bool = False
-    alpn: Optional[list] = None
+    alpn: list | None = None
     ja4: str = ""
     ja4_a: str = ""
     ja3: str = ""
-    chlo_json: Optional[str] = None
+    chlo_json: str | None = None
 
-    def spec(self, server_name: Optional[str] = None, verify: bool = False):
+    def spec(self, server_name: str | None = None, verify: bool | None = None):
         """Return a :class:`~freetls.model.FingerprintSpec` for this profile."""
         from ..model import FingerprintSpec
 
@@ -80,7 +80,7 @@ def _invalidate() -> None:
 
 
 def _compute_fingerprints(
-    *, preset: Optional[str], no_sni: bool, alpn, chlo_json: Optional[str]
+    *, preset: str | None, no_sni: bool, alpn, chlo_json: str | None
 ) -> tuple[str, str, str]:
     """Return (ja4, ja4_a, ja3) computed from the engine, offline."""
     from .. import engine
@@ -102,13 +102,13 @@ def _compute_fingerprints(
 def add_profile(
     name: str,
     *,
-    alias: Optional[str] = None,
-    preset: Optional[str] = None,
-    chlo_json: Optional[str] = None,
+    alias: str | None = None,
+    preset: str | None = None,
+    chlo_json: str | None = None,
     no_sni: bool = False,
-    alpn: Optional[list] = None,
-    ja4: Optional[str] = None,
-    ja3: Optional[str] = None,
+    alpn: list | None = None,
+    ja4: str | None = None,
+    ja3: str | None = None,
 ) -> Profile:
     """Register a profile at runtime and return it.
 
@@ -121,16 +121,29 @@ def add_profile(
         raise ValueError("provide exactly one of preset= or chlo_json=")
     alias = alias or _alias_for(name)
     profile = Profile(
-        name=name, alias=alias, preset=preset, no_sni=no_sni, alpn=alpn,
-        ja4=ja4 or "", ja4_a="", ja3=ja3 or "", chlo_json=chlo_json,
+        name=name,
+        alias=alias,
+        preset=preset,
+        no_sni=no_sni,
+        alpn=alpn,
+        ja4=ja4 or "",
+        ja4_a="",
+        ja3=ja3 or "",
+        chlo_json=chlo_json,
     )
     if not profile.ja4 or not profile.ja3:
         c_ja4, c_ja4a, c_ja3 = _compute_fingerprints(
             preset=preset, no_sni=no_sni, alpn=alpn, chlo_json=chlo_json
         )
         profile = Profile(
-            name=name, alias=alias, preset=preset, no_sni=no_sni, alpn=alpn,
-            ja4=profile.ja4 or c_ja4, ja4_a=c_ja4a, ja3=profile.ja3 or c_ja3,
+            name=name,
+            alias=alias,
+            preset=preset,
+            no_sni=no_sni,
+            alpn=alpn,
+            ja4=profile.ja4 or c_ja4,
+            ja4_a=c_ja4a,
+            ja3=profile.ja3 or c_ja3,
             chlo_json=chlo_json,
         )
     _EXTRA[alias] = profile
@@ -148,11 +161,12 @@ def load_file(path: str) -> int:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     entries = data["profiles"] if isinstance(data, dict) else data
+    allowed = {"alias", "preset", "chlo_json", "no_sni", "alpn", "ja4", "ja3"}
     n = 0
     for e in entries:
         e = dict(e)
         name = e.pop("name")
-        add_profile(name, **e)
+        add_profile(name, **{k: v for k, v in e.items() if k in allowed})
         n += 1
     return n
 
@@ -160,7 +174,7 @@ def load_file(path: str) -> int:
 def _alias_for(preset_or_name: str) -> str:
     base = preset_or_name
     if base.startswith("Hello"):
-        base = base[len("Hello"):]
+        base = base[len("Hello") :]
     return base.lower()
 
 
@@ -174,15 +188,83 @@ def names() -> list:
     return [p.alias for p in list_profiles()]
 
 
-def get(name_or_alias: str) -> Optional[Profile]:
+def get(name_or_alias: str) -> Profile | None:
     return _by_key().get(name_or_alias)
 
 
-def spec(name_or_alias: str, server_name: Optional[str] = None, verify: bool = False):
+def find_ja4(query: str, *, limit: int = 25) -> list:
+    """Profiles whose JA4 equals, starts with, or contains ``query``."""
+    q = query.strip().lower()
+    if not q:
+        return []
+    out = []
+    for p in list_profiles():
+        if not p.ja4:
+            continue
+        j = p.ja4.lower()
+        if j == q or j.startswith(q) or q in j:
+            out.append(p)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def search(query: str, *, limit: int = 25) -> list:
+    """Profiles whose name, alias or JA3 contains ``query`` (case-insensitive)."""
+    q = query.strip().lower()
+    if not q:
+        return []
+    out = []
+    for p in list_profiles():
+        if q in p.name.lower() or q in p.alias.lower() or q in p.ja3.lower():
+            out.append(p)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def export(profiles=None) -> list:
+    """Return the profiles (all by default) as JSON-serialisable dicts."""
+    from dataclasses import asdict
+
+    profs = list_profiles() if profiles is None else list(profiles)
+    return [asdict(p) for p in profs]
+
+
+def save_file(path: str, profiles=None) -> int:
+    """Write profiles to a JSON file loadable by :func:`load_file`."""
+    data = export(profiles)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"profiles": data}, fh, indent=2)
+        fh.write("\n")
+    return len(data)
+
+
+def spec(name_or_alias: str, server_name: str | None = None, verify: bool | None = None):
     prof = get(name_or_alias)
     if prof is None:
         raise KeyError(f"unknown profile: {name_or_alias!r}")
     return prof.spec(server_name=server_name, verify=verify)
+
+
+def h2_bundle(
+    name_or_alias: str,
+    *,
+    settings=None,
+    window_update: int | None = None,
+    pseudo_header_order=None,
+    server_name: str | None = None,
+    verify: bool | None = None,
+):
+    """Return a profile spec with HTTP/2 fingerprint controls applied."""
+    prof_spec = spec(name_or_alias, server_name=server_name, verify=verify)
+    if settings is not None:
+        prof_spec.h2_settings = [list(s) for s in settings]
+    if window_update is not None:
+        prof_spec.h2_window_update = int(window_update)
+    if pseudo_header_order is not None:
+        prof_spec.h2_pseudo_header_order = list(pseudo_header_order)
+    return prof_spec
 
 
 def catalog_info() -> dict:

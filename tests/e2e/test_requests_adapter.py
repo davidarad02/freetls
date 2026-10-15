@@ -1,4 +1,5 @@
 """End-to-end tests for the requests adapter."""
+
 from __future__ import annotations
 
 import warnings
@@ -69,7 +70,6 @@ def test_pooling_reuses_connection(tls_server_13):
     s.mount("https://", adapter)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        first = adapter.last_ja4
         s.get(f"https://127.0.0.1:{tls_server_13.port}/", verify=False)
         ja4_a = adapter.last_ja4
         s.get(f"https://127.0.0.1:{tls_server_13.port}/", verify=False)

@@ -5,9 +5,8 @@ exact bytes that were emitted/received. This module also provides an optional
 Python (`cryptography`) leaf-validation hook so callers can validate the peer
 certificate independently of the Go engine's own x509 verification.
 """
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from .errors import FingerprintError
 from .fingerprint import ja3_from_bytes, ja4_from_bytes, ja4s_from_bytes
@@ -35,13 +34,12 @@ def assert_consistent(session) -> dict:
             continue
         if recomputed.get(key) != reported:
             raise FingerprintError(
-                f"{key} mismatch: reported {reported!r} != emitted "
-                f"{recomputed.get(key)!r}"
+                f"{key} mismatch: reported {reported!r} != emitted " f"{recomputed.get(key)!r}"
             )
     return recomputed
 
 
-def probe(spec, host: str, port: int, server_hostname: Optional[str] = None) -> dict:
+def probe(spec, host: str, port: int, server_hostname: str | None = None) -> dict:
     """Connect to a local server and return its verified fingerprints."""
     from .session import TLSSession
 
@@ -63,11 +61,13 @@ def python_verify_leaf(
     cafile: str,
     server_hostname: str,
     now=None,
+    intermediates_der=None,
 ):
     """Validate a leaf certificate against a CA file using `cryptography`.
 
     Returns the verified chain. Raises on any verification failure. Requires the
-    optional ``cryptography`` dependency.
+    optional ``cryptography`` dependency. ``intermediates_der`` is an optional
+    list of DER-encoded intermediate certificates.
     """
     try:
         from cryptography import x509
@@ -85,13 +85,14 @@ def python_verify_leaf(
         builder = builder.time(now)
     verifier = builder.build_server_verifier(verification.DNSName(server_hostname))
     leaf = x509.load_der_x509_certificate(leaf_der)
-    return verifier.verify(leaf, [])
+    intermediates = [x509.load_der_x509_certificate(d) for d in (intermediates_der or [])]
+    return verifier.verify(leaf, intermediates)
 
 
-def verify_peer_with_python(session, cafile: str, server_hostname: Optional[str] = None):
-    """Run the Python parity hook against a live session's peer certificate."""
-    der = session.state.peer_cert_der
-    if not der:
+def verify_peer_with_python(session, cafile: str, server_hostname: str | None = None):
+    """Run the Python parity hook against a live session's peer certificate chain."""
+    chain = session.peer_chain()
+    if not chain:
         raise FingerprintError("no peer certificate captured")
     host = server_hostname or session.state.server_name
-    return python_verify_leaf(der, cafile, host)
+    return python_verify_leaf(chain[0], cafile, host, intermediates_der=chain[1:])

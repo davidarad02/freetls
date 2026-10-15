@@ -1,4 +1,5 @@
 """The offline spec-derived JA4 must equal the JA4 the engine actually emits."""
+
 from __future__ import annotations
 
 import freetls
@@ -26,6 +27,8 @@ def test_true_random_spec_matches_engine(tls_server_13):
 
 
 def test_partial_random_spec_matches_engine(tls_server_13):
-    spec = modes.partial_random(server_name="localhost", seed=3, n_random_ciphers=8, n_random_extensions=6)
+    spec = modes.partial_random(
+        server_name="localhost", seed=3, n_random_ciphers=8, n_random_extensions=6
+    )
     a, b, c = _check(spec, tls_server_13.port)
     assert a == b == c

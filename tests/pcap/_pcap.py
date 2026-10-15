@@ -3,6 +3,7 @@
 Used to verify, from the actual loopback traffic, that the ClientHello the
 engine put on the wire really produces the reported JA4.
 """
+
 from __future__ import annotations
 
 import struct
@@ -21,9 +22,9 @@ def _read_pcap(path: str):
     off = 24
     packets = []
     while off + 16 <= len(data):
-        _, _, incl, _ = struct.unpack(endian + "IIII", data[off:off + 16])
+        _, _, incl, _ = struct.unpack(endian + "IIII", data[off : off + 16])
         off += 16
-        packets.append(data[off:off + incl])
+        packets.append(data[off : off + incl])
         off += incl
     return linktype, packets
 
@@ -60,11 +61,11 @@ def client_hellos(path: str) -> list[bytes]:
         off = 0
         while off + 5 <= len(payload):
             rtype = payload[off]
-            rlen = struct.unpack(">H", payload[off + 3:off + 5])[0]
-            rec = payload[off + 5:off + 5 + rlen]
+            rlen = struct.unpack(">H", payload[off + 3 : off + 5])[0]
+            rec = payload[off + 5 : off + 5 + rlen]
             if rtype == 0x16 and len(rec) >= 4 and rec[0] == 1:
                 hs_len = int.from_bytes(rec[1:4], "big")
-                out.append(rec[:4 + hs_len])
+                out.append(rec[: 4 + hs_len])
             off += 5 + rlen
     return out
 
@@ -79,10 +80,10 @@ def server_hellos(path: str) -> list[bytes]:
         off = 0
         while off + 5 <= len(payload):
             rtype = payload[off]
-            rlen = struct.unpack(">H", payload[off + 3:off + 5])[0]
-            rec = payload[off + 5:off + 5 + rlen]
+            rlen = struct.unpack(">H", payload[off + 3 : off + 5])[0]
+            rec = payload[off + 5 : off + 5 + rlen]
             if rtype == 0x16 and len(rec) >= 4 and rec[0] == 2:
                 hs_len = int.from_bytes(rec[1:4], "big")
-                out.append(rec[:4 + hs_len])
+                out.append(rec[: 4 + hs_len])
             off += 5 + rlen
     return out

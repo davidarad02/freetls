@@ -6,10 +6,11 @@
 - Random:     maximal randomization from the assigned universe, with a minimal
               functional baseline so the handshake still completes.
 """
+
 from __future__ import annotations
 
 import random
-from typing import Iterable, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 from .fingerprint.tables import as_cipher, as_group, as_sigalg, universe
 from .model import (
@@ -23,13 +24,31 @@ from .model import (
 
 # A broad, Chrome-like cipher list that works against virtually all servers.
 DEFAULT_CIPHERS = [
-    0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F, 0xC02C, 0xC030, 0xCCA9, 0xCCA8,
-    0xC013, 0xC014, 0x009C, 0x009D, 0x002F, 0x0035,
+    0x1301,
+    0x1302,
+    0x1303,
+    0xC02B,
+    0xC02F,
+    0xC02C,
+    0xC030,
+    0xCCA9,
+    0xCCA8,
+    0xC013,
+    0xC014,
+    0x009C,
+    0x009D,
+    0x002F,
+    0x0035,
 ]
 
 DEFAULT_SIGALGS = [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601]
 DEFAULT_GROUPS = [0x001D, 0x0017, 0x0018]
 DEFAULT_ALPN = ["h2", "http/1.1"]
+
+# The 16 reserved GREASE values (RFC 8701). Servers ignore these code points,
+# so injecting them makes a ClientHello look browser-like without changing the
+# negotiated cryptography. JA4/JA3 exclude GREASE by value.
+GREASE_VALUES = [v * 0x101 for v in range(0x0A, 0x100, 0x10)]
 
 # Assigned IANA universe (loaded once).
 _U = universe()
@@ -58,12 +77,53 @@ _FUNCTIONAL_EXT_IDS = {
 # 0x0029, 0x002f, 0x0032) are deliberately excluded, so random modes keep an
 # assigned-only universe AND complete real handshakes.
 SAFE_PADDING_EXT_IDS = [
-    0x0002, 0x0003, 0x0004, 0x0006, 0x0007, 0x0008, 0x0009, 0x000C, 0x000F,
-    0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0018, 0x0019, 0x001A,
-    0x001C, 0x001D, 0x001E, 0x001F, 0x0020, 0x0021, 0x0022, 0x0024, 0x0025,
-    0x0026, 0x0027, 0x002A, 0x002C, 0x0030, 0x0031, 0x0034, 0x0035, 0x0036,
-    0x0037, 0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0xFD00,
-    0xFE0D, 0xFF01,
+    0x0002,
+    0x0003,
+    0x0004,
+    0x0006,
+    0x0007,
+    0x0008,
+    0x0009,
+    0x000C,
+    0x000F,
+    0x0011,
+    0x0012,
+    0x0013,
+    0x0014,
+    0x0015,
+    0x0016,
+    0x0018,
+    0x0019,
+    0x001A,
+    0x001C,
+    0x001D,
+    0x001E,
+    0x001F,
+    0x0020,
+    0x0021,
+    0x0022,
+    0x0024,
+    0x0025,
+    0x0026,
+    0x0027,
+    0x002A,
+    0x002C,
+    0x0030,
+    0x0031,
+    0x0034,
+    0x0035,
+    0x0036,
+    0x0037,
+    0x0038,
+    0x0039,
+    0x003A,
+    0x003B,
+    0x003C,
+    0x003D,
+    0x003E,
+    0xFD00,
+    0xFE0D,
+    0xFF01,
 ]
 
 
@@ -73,7 +133,7 @@ def _versions_list(vers_min: int, vers_max: int) -> list[int]:
 
 
 def functional_extensions(
-    server_name: Optional[str],
+    server_name: str | None,
     alpn: Sequence[str],
     groups: Sequence[int | str],
     sigalgs: Sequence[int | str],
@@ -98,41 +158,83 @@ def functional_extensions(
 
 
 def baseline_spec(
-    server_name: Optional[str] = None,
-    ciphers: Optional[Sequence[int | str]] = None,
+    server_name: str | None = None,
+    ciphers: Sequence[int | str] | None = None,
     alpn: Sequence[str] = DEFAULT_ALPN,
     sigalgs: Sequence[int | str] = DEFAULT_SIGALGS,
     groups: Sequence[int | str] = DEFAULT_GROUPS,
     vers_min: int = TLS12,
     vers_max: int = TLS13,
-    verify: bool = False,
+    verify: bool | None = None,
+    grease: bool = False,
+    grease_strategy: str = "random",
+    seed: int | None = None,
 ) -> FingerprintSpec:
     """A functional, high-compatibility baseline (TLS 1.2/1.3 by default)."""
-    ciphers = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_CIPHERS)]
+    cipher_list = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_CIPHERS)]
     sigalgs = [as_sigalg(s) for s in sigalgs]
     groups = [as_group(g) for g in groups]
-    return FingerprintSpec(
-        ciphers=ciphers,
-        extensions=functional_extensions(
-            server_name, alpn, groups, sigalgs, vers_min, vers_max
-        ),
+    spec = FingerprintSpec(
+        ciphers=cipher_list,
+        extensions=functional_extensions(server_name, alpn, groups, sigalgs, vers_min, vers_max),
         vers_min=vers_min,
         vers_max=vers_max,
         server_name=server_name,
         verify=verify,
     )
+    if grease:
+        add_grease(spec, strategy=grease_strategy, seed=seed)
+    return spec
+
+
+def add_grease(
+    spec: FingerprintSpec,
+    *,
+    ciphers: bool = True,
+    groups: bool = True,
+    versions: bool = True,
+    extensions: bool = True,
+    strategy: str = "random",
+    seed: int | None = None,
+) -> FingerprintSpec:
+    """Inject GREASE code points into a spec's cipher/group/version/extension slots.
+
+    ``strategy`` is ``"random"`` (a fresh GREASE value per slot) or ``"fixed"``
+    (always ``0x0a0a``). GREASE slots are inserted at the front of each list,
+    matching how mainstream browsers emit them; servers ignore the values.
+    """
+    if strategy not in ("random", "fixed"):
+        raise ValueError(f"unknown grease strategy: {strategy!r}")
+    rng = random.Random(seed)
+
+    def pick() -> int:
+        return 0x0A0A if strategy == "fixed" else rng.choice(GREASE_VALUES)
+
+    if ciphers:
+        spec.ciphers = [pick(), *spec.ciphers]
+    if groups:
+        ext = spec.find("supported_curves")
+        if ext is not None:
+            ext.values = [pick(), *ext.values]
+    if versions:
+        ext = spec.find("supported_versions")
+        if ext is not None:
+            ext.values = [pick(), *ext.values]
+    if extensions:
+        spec.extensions.insert(0, Extension.grease(pick()))
+    return spec
 
 
 def specific(
-    ciphers: Optional[Iterable[int]] = None,
-    extensions: Optional[Iterable[Extension]] = None,
-    server_name: Optional[str] = None,
+    ciphers: Iterable[int] | None = None,
+    extensions: Iterable[Extension] | None = None,
+    server_name: str | None = None,
     alpn: Sequence[str] = DEFAULT_ALPN,
     sigalgs: Sequence[int | str] = DEFAULT_SIGALGS,
     groups: Sequence[int | str] = DEFAULT_GROUPS,
     vers_min: int = TLS12,
     vers_max: int = TLS13,
-    verify: bool = False,
+    verify: bool | None = None,
 ) -> FingerprintSpec:
     """Specific mode: exact control. Missing functional extensions are added."""
     spec = baseline_spec(
@@ -167,15 +269,15 @@ def _random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[i
 
 
 def partial_random(
-    server_name: Optional[str] = None,
-    ciphers: Optional[Sequence[int | str]] = None,
+    server_name: str | None = None,
+    ciphers: Sequence[int | str] | None = None,
     alpn: Sequence[str] = DEFAULT_ALPN,
     vers_min: int = TLS12,
     vers_max: int = TLS13,
     n_random_ciphers: int = 10,
     n_random_extensions: int = 8,
-    seed: Optional[int] = None,
-    verify: bool = False,
+    seed: int | None = None,
+    verify: bool | None = None,
 ) -> FingerprintSpec:
     """Partial-random mode: functional baseline + randomized padding."""
     rng = random.Random(seed)
@@ -184,8 +286,12 @@ def partial_random(
     base += _random_cipher_padding(rng, n_random_ciphers, used_c)
 
     spec = baseline_spec(
-        server_name=server_name, ciphers=base, alpn=alpn,
-        vers_min=vers_min, vers_max=vers_max, verify=verify,
+        server_name=server_name,
+        ciphers=base,
+        alpn=alpn,
+        vers_min=vers_min,
+        vers_max=vers_max,
+        verify=verify,
     )
     used_e = set(_FUNCTIONAL_EXT_IDS)
     spec.extensions += _random_generic_exts(rng, n_random_extensions, used_e)
@@ -193,14 +299,14 @@ def partial_random(
 
 
 def true_random(
-    server_name: Optional[str] = None,
+    server_name: str | None = None,
     alpn: Sequence[str] = DEFAULT_ALPN,
     vers_min: int = TLS12,
     vers_max: int = TLS13,
     n_ciphers: int = 60,
     n_extensions: int = 40,
-    seed: Optional[int] = None,
-    verify: bool = False,
+    seed: int | None = None,
+    verify: bool | None = None,
 ) -> FingerprintSpec:
     """True-random mode: maximal random padding, minimal functional baseline.
 
@@ -213,8 +319,12 @@ def true_random(
     ciphers = core + _random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
 
     spec = baseline_spec(
-        server_name=server_name, ciphers=ciphers, alpn=alpn,
-        vers_min=vers_min, vers_max=vers_max, verify=verify,
+        server_name=server_name,
+        ciphers=ciphers,
+        alpn=alpn,
+        vers_min=vers_min,
+        vers_max=vers_max,
+        verify=verify,
     )
     used_e = set(_FUNCTIONAL_EXT_IDS)
     spec.extensions += _random_generic_exts(rng, n_extensions, used_e)

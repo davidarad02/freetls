@@ -2,6 +2,7 @@
 
 Loads the Go c-shared library and exposes a small, safe Python wrapper.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,13 +11,13 @@ import platform
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 
 from ..errors import EngineError, HandshakeError, SpecError
 
 _CDEF = """
 char *freetls_version(void);
+int freetls_abi_version(void);
 void freetls_free(char *);
 int freetls_ping(void);
 long long freetls_session_new(const char *);
@@ -25,10 +26,12 @@ int freetls_handshake(long long, int, const char *);
 long long freetls_read(long long, void *, long long);
 long long freetls_write(long long, const void *, long long);
 void freetls_close(long long);
+void freetls_set_timeout(long long, int);
 char *freetls_get_client_hello(long long);
 char *freetls_get_server_hello(long long);
 char *freetls_get_state(long long);
 char *freetls_last_error(long long);
+long long freetls_session_count(void);
 char *freetls_preset_raw(const char *);
 char *freetls_preset_raw_opts(const char *, int, const char *);
 char *freetls_chlo_raw(const char *);
@@ -69,7 +72,7 @@ _ffi = None
 _lib = None
 
 
-def _native_source_dir() -> Optional[str]:
+def _native_source_dir() -> str | None:
     """The bundled ``native/`` Go source dir, if this is a source checkout."""
     here = os.path.dirname(os.path.abspath(__file__))  # src/freetls/engine
     proj_root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
@@ -79,7 +82,7 @@ def _native_source_dir() -> Optional[str]:
     return None
 
 
-def _find_go() -> Optional[str]:
+def _find_go() -> str | None:
     env = os.environ.get("FREETLS_GO")
     if env:
         return env if os.path.exists(env) else shutil.which(env)
@@ -97,7 +100,7 @@ def _find_go() -> Optional[str]:
     return None
 
 
-def _autobuild() -> Optional[str]:
+def _autobuild() -> str | None:
     """Build the engine from ``native/`` into ``native/`` if possible.
 
     Lets a fresh source checkout work without a separate build step. Disable
@@ -164,25 +167,54 @@ def _load():
             "or set FREETLS_LIB=/path/to/libfreetls.so. Searched: "
             + ", ".join(p for p in _candidate_paths() if p)
         )
+    major = int(lib.freetls_abi_version())
+    if major != _EXPECTED_ABI:
+        raise EngineError(
+            f"native engine C-ABI version {major} is incompatible with this "
+            f"Python binding (expected {_EXPECTED_ABI}); rebuild with `make native`"
+        )
     _ffi, _lib = ffi, lib
     return ffi, lib
 
 
+_EXPECTED_ABI = 1
+
+
+def abi_version() -> int:
+    """The C-ABI version reported by the loaded engine."""
+    ffi, lib = _load()
+    return int(lib.freetls_abi_version())
+
+
+def _cstr(ptr) -> str:
+    """Read a C string returned by the engine and free it (avoids leaks)."""
+    assert _ffi is not None and _lib is not None
+    text = _ffi.string(ptr).decode()
+    _lib.freetls_free(ptr)
+    return text
+
+
 def version() -> str:
     ffi, lib = _load()
-    return ffi.string(lib.freetls_version()).decode()
+    return _cstr(lib.freetls_version())
+
+
+def active_sessions() -> int:
+    """Number of live native sessions (for leak tests)."""
+    ffi, lib = _load()
+    return int(lib.freetls_session_count())
 
 
 def preset_list() -> list:
     """Names of the built-in uTLS ClientHello presets."""
     ffi, lib = _load()
-    return json.loads(ffi.string(lib.freetls_preset_list()).decode() or "[]")
+    return json.loads(_cstr(lib.freetls_preset_list()) or "[]")
 
 
 def preset_raw(name: str) -> bytes:
     """Build a preset's ClientHello offline; returns the raw handshake bytes."""
     ffi, lib = _load()
-    s = ffi.string(lib.freetls_preset_raw(name.encode())).decode()
+    s = _cstr(lib.freetls_preset_raw(name.encode()))
     return bytes.fromhex(s) if s else b""
 
 
@@ -199,22 +231,20 @@ def preset_raw_opts(name: str, no_sni: bool = False, alpn=None) -> bytes:
         alpn_json = b"-"
     else:
         alpn_json = json.dumps(list(alpn)).encode()
-    s = ffi.string(
-        lib.freetls_preset_raw_opts(name.encode(), 1 if no_sni else 0, alpn_json)
-    ).decode()
+    s = _cstr(lib.freetls_preset_raw_opts(name.encode(), 1 if no_sni else 0, alpn_json))
     return bytes.fromhex(s) if s else b""
 
 
 def chlo_raw(chlo_json: str) -> bytes:
     """Build a ClientHello offline from a uTLS ClientHelloSpec JSON document.
 
-    Returns the raw handshake message bytes, or ``b""`` if the document is
-    invalid/unsupported. No network is used.
+    Returns the raw handshake message bytes, or raises ``SpecError`` if the
+    document is invalid/unsupported. No network is used.
     """
     ffi, lib = _load()
-    s = ffi.string(lib.freetls_chlo_raw(chlo_json.encode())).decode()
+    s = _cstr(lib.freetls_chlo_raw(chlo_json.encode()))
     if not s:
-        reason = ffi.string(lib.freetls_aux_error()).decode() or "invalid ClientHelloSpec JSON"
+        reason = _cstr(lib.freetls_aux_error()) or "invalid ClientHelloSpec JSON"
         raise SpecError(f"chlo_json: {reason}")
     return bytes.fromhex(s)
 
@@ -226,10 +256,15 @@ class EngineState:
     alpn: str = ""
     server_name: str = ""
     peer_cert_b64: str = ""
+    peer_certs_b64: list = field(default_factory=list)
+    did_resume: bool = False
+    ocsp_b64: str = ""
+    sct_b64: list = field(default_factory=list)
+    peer_alps_b64: str = ""
     error: str = ""
 
     @classmethod
-    def from_json(cls, text: str) -> "EngineState":
+    def from_json(cls, text: str) -> EngineState:
         try:
             d = json.loads(text or "{}")
         except json.JSONDecodeError:
@@ -240,14 +275,39 @@ class EngineState:
             alpn=d.get("alpn", ""),
             server_name=d.get("server_name", ""),
             peer_cert_b64=d.get("peer_cert_b64", ""),
+            peer_certs_b64=list(d.get("peer_certs_b64") or []),
+            did_resume=bool(d.get("did_resume", False)),
+            ocsp_b64=d.get("ocsp_response_b64", ""),
+            sct_b64=list(d.get("sct_b64") or []),
+            peer_alps_b64=d.get("peer_alps_b64", ""),
             error=d.get("error", ""),
         )
 
     @property
     def peer_cert_der(self) -> bytes:
-        import base64
+        return _b64(self.peer_cert_b64)
 
-        return base64.b64decode(self.peer_cert_b64) if self.peer_cert_b64 else b""
+    @property
+    def peer_certs_der(self) -> list:
+        return [_b64(x) for x in self.peer_certs_b64]
+
+    @property
+    def ocsp_response(self) -> bytes:
+        return _b64(self.ocsp_b64)
+
+    @property
+    def signed_certificate_timestamps(self) -> list:
+        return [_b64(x) for x in self.sct_b64]
+
+    @property
+    def peer_application_settings(self) -> bytes:
+        return _b64(self.peer_alps_b64)
+
+
+def _b64(text: str) -> bytes:
+    import base64
+
+    return base64.b64decode(text) if text else b""
 
 
 class EngineSession:
@@ -260,10 +320,12 @@ class EngineSession:
         spec_json = json.dumps(spec).encode()
         self._handle = lib.freetls_session_new(spec_json)
         if self._handle <= 0:
-            raise EngineError("freetls_session_new failed (invalid spec)")
+            reason = _cstr(lib.freetls_aux_error()) or "invalid spec"
+            raise EngineError(f"freetls_session_new failed: {reason}")
         self._closed = False
+        self._freed = False
 
-    def handshake(self, fd: int, sni: Optional[str] = None) -> None:
+    def handshake(self, fd: int, sni: str | None = None) -> None:
         sni_b = (sni or "").encode()
         rc = self._lib.freetls_handshake(self._handle, fd, sni_b)
         if rc != 0:
@@ -287,34 +349,37 @@ class EngineSession:
         return int(rc)
 
     def client_hello(self) -> bytes:
-        s = self._ffi.string(self._lib.freetls_get_client_hello(self._handle)).decode()
+        s = _cstr(self._lib.freetls_get_client_hello(self._handle))
         return bytes.fromhex(s) if s else b""
 
     def server_hello(self) -> bytes:
-        s = self._ffi.string(self._lib.freetls_get_server_hello(self._handle)).decode()
+        s = _cstr(self._lib.freetls_get_server_hello(self._handle))
         return bytes.fromhex(s) if s else b""
 
     def state(self) -> EngineState:
-        s = self._ffi.string(self._lib.freetls_get_state(self._handle)).decode()
+        s = _cstr(self._lib.freetls_get_state(self._handle))
         return EngineState.from_json(s)
 
     def last_error(self) -> str:
-        return self._ffi.string(self._lib.freetls_last_error(self._handle)).decode()
+        return _cstr(self._lib.freetls_last_error(self._handle))
 
     def h2_request(self, req: dict) -> dict:
         """Perform an HTTP/2 request with full fingerprint control."""
         payload = json.dumps(req).encode()
-        raw = self._ffi.string(
-            self._lib.freetls_h2_request(self._handle, payload)
-        ).decode()
+        raw = _cstr(self._lib.freetls_h2_request(self._handle, payload))
         return json.loads(raw or "{}")
 
     def close(self) -> None:
-        if not self._closed:
+        if not self._closed and not self._freed:
             self._lib.freetls_close(self._handle)
             self._closed = True
 
+    def set_timeout(self, ms: int) -> None:
+        """Set the per-session I/O timeout in milliseconds (0 = none)."""
+        self._lib.freetls_set_timeout(self._handle, int(ms))
+
     def free(self) -> None:
-        if not self._closed:
+        if not self._freed:
             self._lib.freetls_session_free(self._handle)
+            self._freed = True
             self._closed = True

@@ -1,4 +1,5 @@
 """Tests against a local Go net/http TLS server (independent stack + HTTP/2)."""
+
 from __future__ import annotations
 
 import freetls

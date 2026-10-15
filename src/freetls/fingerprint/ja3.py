@@ -4,6 +4,7 @@ JA3 = md5("SSLVersion,Cipher,SSLExtension,EllipticCurve,ECPointFormat") with
 decimal values joined by '-' within each field and ',' between fields, GREASE
 values removed.
 """
+
 from __future__ import annotations
 
 from hashlib import md5

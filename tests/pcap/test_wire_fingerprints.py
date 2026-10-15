@@ -3,9 +3,9 @@
 Captures loopback with a capability-bearing tcpdump, then parses the pcap with an
 independent extractor (tests/pcap/_pcap.py) and recomputes the fingerprints.
 """
+
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import time

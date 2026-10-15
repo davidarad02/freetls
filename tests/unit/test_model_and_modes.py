@@ -1,8 +1,10 @@
 """Unit tests for IANA tables, the spec model, and modes."""
+
 from __future__ import annotations
 
 import pytest
-from freetls import Extension, FingerprintSpec, SpecError, modes
+
+from freetls import Extension, SpecError, modes
 from freetls.fingerprint import tables
 
 
@@ -51,8 +53,14 @@ def test_spec_copy_is_deep():
 def test_baseline_is_functional():
     spec = modes.baseline_spec(server_name="a.com")
     kinds = {e.kind for e in spec.extensions}
-    for required in ("sni", "supported_versions", "key_share",
-                     "signature_algorithms", "supported_curves", "alpn"):
+    for required in (
+        "sni",
+        "supported_versions",
+        "key_share",
+        "signature_algorithms",
+        "supported_curves",
+        "alpn",
+    ):
         assert required in kinds
 
 
@@ -76,8 +84,10 @@ def test_random_modes_use_assigned_values_only():
     universe = tables.universe()
     allowed_c = set(universe["ciphers"])
     allowed_e = set(modes.SAFE_PADDING_EXT_IDS)
-    for spec in (modes.partial_random(seed=5),
-                 modes.true_random(seed=5, n_ciphers=100, n_extensions=40)):
+    for spec in (
+        modes.partial_random(seed=5),
+        modes.true_random(seed=5, n_ciphers=100, n_extensions=40),
+    ):
         assert set(spec.ciphers) <= allowed_c
         generic = [e.id for e in spec.extensions if e.kind == "generic"]
         assert set(generic) <= allowed_e

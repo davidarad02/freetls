@@ -1,4 +1,5 @@
 """End-to-end tests for verification + Python certificate parity."""
+
 from __future__ import annotations
 
 import subprocess
@@ -21,13 +22,38 @@ def _openssl(*args):
 def _make_ca_signed(d: Path):
     """Create a CA and a server cert signed by it (CA:FALSE, SAN localhost)."""
     ca_key, ca_crt = d / "ca.key", d / "ca.crt"
-    _openssl("req", "-x509", "-newkey", "rsa:2048", "-keyout", str(ca_key),
-             "-out", str(ca_crt), "-days", "2", "-nodes", "-subj", "/CN=Test CA",
-             "-addext", "basicConstraints=critical,CA:TRUE",
-             "-addext", "keyUsage=critical,keyCertSign,cRLSign")
+    _openssl(
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        str(ca_key),
+        "-out",
+        str(ca_crt),
+        "-days",
+        "2",
+        "-nodes",
+        "-subj",
+        "/CN=Test CA",
+        "-addext",
+        "basicConstraints=critical,CA:TRUE",
+        "-addext",
+        "keyUsage=critical,keyCertSign,cRLSign",
+    )
     srv_key, srv_csr, srv_crt = d / "srv.key", d / "srv.csr", d / "srv.crt"
-    _openssl("req", "-newkey", "rsa:2048", "-keyout", str(srv_key),
-             "-out", str(srv_csr), "-nodes", "-subj", "/CN=localhost")
+    _openssl(
+        "req",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        str(srv_key),
+        "-out",
+        str(srv_csr),
+        "-nodes",
+        "-subj",
+        "/CN=localhost",
+    )
     ext = d / "ext.cnf"
     ext.write_text(
         "subjectAltName=DNS:localhost,IP:127.0.0.1\n"
@@ -35,9 +61,23 @@ def _make_ca_signed(d: Path):
         "keyUsage=critical,digitalSignature,keyEncipherment\n"
         "extendedKeyUsage=serverAuth\n"
     )
-    _openssl("x509", "-req", "-in", str(srv_csr), "-CA", str(ca_crt),
-             "-CAkey", str(ca_key), "-CAcreateserial", "-out", str(srv_crt),
-             "-days", "2", "-extfile", str(ext))
+    _openssl(
+        "x509",
+        "-req",
+        "-in",
+        str(srv_csr),
+        "-CA",
+        str(ca_crt),
+        "-CAkey",
+        str(ca_key),
+        "-CAcreateserial",
+        "-out",
+        str(srv_crt),
+        "-days",
+        "2",
+        "-extfile",
+        str(ext),
+    )
     return str(ca_crt), str(srv_crt), str(srv_key)
 
 

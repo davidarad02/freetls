@@ -1,9 +1,9 @@
 """requests integration: a drop-in HTTPAdapter using the freetls engine."""
+
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable
 
-import requests
 from requests.adapters import HTTPAdapter
 
 from ..model import FingerprintSpec
@@ -20,8 +20,8 @@ class JA4Adapter(HTTPAdapter):
 
     def __init__(
         self,
-        spec: Optional[FingerprintSpec] = None,
-        spec_factory: Optional[Callable[[], FingerprintSpec]] = None,
+        spec: FingerprintSpec | None = None,
+        spec_factory: Callable[[], FingerprintSpec] | None = None,
         **kwargs,
     ) -> None:
         if spec is None and spec_factory is None:

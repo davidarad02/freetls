@@ -207,7 +207,13 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 }
 
 //export freetls_h2_request
-func freetls_h2_request(h C.longlong, reqJSON *C.char) *C.char {
+func freetls_h2_request(h C.longlong, reqJSON *C.char) (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			b, _ := json.Marshal(h2Response{Error: fmt.Sprintf("panic: %v", r)})
+			out = C.CString(string(b))
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil || s.uconn == nil {
 		return C.CString(`{"error":"no active session"}`)

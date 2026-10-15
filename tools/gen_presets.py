@@ -9,6 +9,7 @@ need a session) by asking the freshly built engine.
 
 Regenerate with ``make gen`` after bumping uTLS.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,9 +44,14 @@ FOOTER = "}\n"
 
 
 def find_go() -> str:
-    for cand in (os.environ.get("FREETLS_GO"), "go",
-                 os.path.expanduser("~/.local/go/bin/go"),
-                 "/usr/local/go/bin/go", "/opt/go/bin/go", "/opt/homebrew/bin/go"):
+    for cand in (
+        os.environ.get("FREETLS_GO"),
+        "go",
+        os.path.expanduser("~/.local/go/bin/go"),
+        "/usr/local/go/bin/go",
+        "/opt/go/bin/go",
+        "/opt/homebrew/bin/go",
+    ):
         if not cand:
             continue
         if os.path.isabs(cand):
@@ -63,7 +69,10 @@ def utls_dir(go: str) -> str:
     env.setdefault("GOPATH", os.path.expanduser("~/go"))
     out = subprocess.run(
         [go, "list", "-m", "-f", "{{.Dir}}", "github.com/refraction-networking/utls"],
-        cwd=NATIVE, capture_output=True, text=True, env=env,
+        cwd=NATIVE,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     d = out.stdout.strip()
     if out.returncode != 0 or not d or not os.path.isdir(d):
@@ -95,7 +104,9 @@ def build(go: str) -> None:
     env["PATH"] = os.path.dirname(go) + os.pathsep + env.get("PATH", "")
     subprocess.run(
         [go, "build", "-buildmode=c-shared", "-o", "libfreetls.so", "."],
-        cwd=NATIVE, check=True, env=env,
+        cwd=NATIVE,
+        check=True,
+        env=env,
     )
 
 

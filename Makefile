@@ -9,7 +9,7 @@ GO ?= $(shell command -v go 2>/dev/null || echo "$(HOME)/.local/go/bin/go")
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv native test test-fast coverage gen setup-caps build clean
+.PHONY: help venv native test test-fast coverage gen setup-caps build fmt lint typecheck clean
 
 help:
 	@echo "freetls targets:"
@@ -21,6 +21,9 @@ help:
 	@echo "  make gen         regenerate IANA tables + preset map + profile catalog"
 	@echo "  make setup-caps  one-time: install a cap_net_raw tcpdump under ~/.local"
 	@echo "  make build       build sdist + wheel into dist/"
+	@echo "  make fmt         format with black + ruff --fix"
+	@echo "  make lint        ruff check"
+	@echo "  make typecheck   mypy"
 	@echo "  make clean       remove build artifacts"
 
 venv:
@@ -49,6 +52,16 @@ gen: native
 
 setup-caps:
 	sh scripts/setup_capabilities.sh
+
+fmt:
+	$(PY) -m black src tools tests
+	$(PY) -m ruff check --fix src tools tests
+
+lint:
+	$(PY) -m ruff check src tools tests
+
+typecheck:
+	$(PY) -m mypy
 
 build:
 	$(PY) -m build

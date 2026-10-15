@@ -7,16 +7,17 @@ Besides value/name lookups, this module provides coercion helpers
 (``as_cipher``, ``as_extension``, ``as_sigalg``, ``as_group``) that accept an
 int, an ``IntEnum`` member, or a case-insensitive name string.
 """
+
 from __future__ import annotations
 
 import json
 import os
-from functools import lru_cache
+from functools import cache
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load(name: str) -> dict:
     with open(os.path.join(_DIR, f"{name}.json"), encoding="utf-8") as fh:
         return json.load(fh)

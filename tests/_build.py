@@ -1,4 +1,5 @@
 """Helpers to synthesize raw TLS handshake messages for tests."""
+
 from __future__ import annotations
 
 import struct

@@ -7,6 +7,7 @@ package main
 import "C"
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -42,6 +44,8 @@ type extJSON struct {
 	Points     []uint8  `json:"points,omitempty"`
 	ServerName string   `json:"server_name,omitempty"`
 	Algorithms []uint16 `json:"algorithms,omitempty"`
+	// PaddingLen, when > 0, requests a fixed-length padding extension.
+	PaddingLen int `json:"padding_len,omitempty"`
 }
 
 type specJSON struct {
@@ -67,6 +71,21 @@ type specJSON struct {
 	Verify     bool   `json:"verify"`
 	RootCA     string `json:"root_ca,omitempty"`
 	ServerName string `json:"server_name,omitempty"`
+
+	// Certificate suite options.
+	CheckHostname *bool    `json:"check_hostname,omitempty"` // default true
+	SystemRoots   *bool    `json:"system_roots,omitempty"`   // default true
+	CADir         string   `json:"ca_dir,omitempty"`         // dir of PEM certs
+	CAData        string   `json:"cadata,omitempty"`         // PEM text
+	ClientCert    string   `json:"client_cert,omitempty"`    // PEM file (mTLS)
+	ClientKey     string   `json:"client_key,omitempty"`     // PEM file (mTLS)
+	ClientCertPEM string   `json:"client_cert_pem,omitempty"`
+	ClientKeyPEM  string   `json:"client_key_pem,omitempty"`
+	PinnedSHA256  []string `json:"pinned_sha256,omitempty"` // base64 sha256 of leaf DER
+
+	// SessionCache, when > 0, enables TLS session resumption through a shared
+	// process-wide LRU session cache (TLS 1.2 tickets and TLS 1.3 PSKs).
+	SessionCache int `json:"session_cache,omitempty"`
 
 	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
@@ -149,19 +168,19 @@ func firstHandshake(stream []byte, wantType byte) []byte {
 // ---------------------------------------------------------------------------
 
 type session struct {
-	spec    *utls.ClientHelloSpec
-	config  *utls.Config
-	tee     *teeConn
-	uconn   *utls.UConn
+	spec     *utls.ClientHelloSpec
+	config   *utls.Config
+	tee      *teeConn
+	uconn    *utls.UConn
 	raw      net.Conn
 	preset   string
 	chloJSON string
 	noSNI    bool
-	alpn    []string
-	alpnSet bool
-	alpnDel bool
-	lastErr string
-	timeout time.Duration
+	alpn     []string
+	alpnSet  bool
+	alpnDel  bool
+	lastErr  string
+	timeout  time.Duration
 }
 
 var (
@@ -169,6 +188,29 @@ var (
 	registry       = map[int64]*session{}
 	nextID   int64 = 1
 )
+
+// Shared client session caches used for TLS resumption, keyed by capacity. They
+// are process-wide so separate freetls sessions (each a fresh engine session)
+// can resume a previously established session with the same server. Sessions
+// that request the same capacity share a cache.
+var (
+	sessCacheMu    sync.Mutex
+	sessCacheByCap = map[int]utls.ClientSessionCache{}
+)
+
+func sessionCache(capacity int) utls.ClientSessionCache {
+	if capacity <= 0 {
+		capacity = 64
+	}
+	sessCacheMu.Lock()
+	defer sessCacheMu.Unlock()
+	if c, ok := sessCacheByCap[capacity]; ok {
+		return c
+	}
+	c := utls.NewLRUClientSessionCache(capacity)
+	sessCacheByCap[capacity] = c
+	return c
+}
 
 func putSession(s *session) int64 {
 	regMu.Lock()
@@ -256,7 +298,21 @@ func buildExtension(e extJSON) (utls.TLSExtension, error) {
 		}
 		return &utls.UtlsCompressCertExtension{Algorithms: algs}, nil
 	case "padding":
+		if e.PaddingLen > 0 {
+			n := e.PaddingLen
+			return &utls.UtlsPaddingExtension{
+				GetPaddingLen: func(int) (int, bool) { return n, true },
+			}, nil
+		}
 		return &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle}, nil
+	case "record_size_limit":
+		var limit uint16
+		if len(e.Values) > 0 {
+			limit = e.Values[0]
+		}
+		return &utls.FakeRecordSizeLimitExtension{Limit: limit}, nil
+	case "pre_shared_key":
+		return &utls.UtlsPreSharedKeyExtension{}, nil
 	case "application_settings":
 		return &utls.ApplicationSettingsExtension{SupportedProtocols: e.Strings}, nil
 	case "generic":
@@ -302,22 +358,179 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 		TLSVersMax:         s.VersMax,
 	}
 
-	cfg := &utls.Config{
-		ServerName:         s.ServerName,
-		InsecureSkipVerify: !s.Verify,
+	checkHostname := true
+	if s.CheckHostname != nil {
+		checkHostname = *s.CheckHostname
 	}
-	if s.Verify && s.RootCA != "" {
+	systemRoots := true
+	if s.SystemRoots != nil {
+		systemRoots = *s.SystemRoots
+	}
+
+	cfg := &utls.Config{ServerName: s.ServerName}
+	// With HelloCustom uTLS refuses to handshake if resumption is enabled but
+	// no ticket/PSK extension is present. This lets a spec opt out cleanly.
+	cfg.PreferSkipResumptionOnNilExtension = true
+	if s.SessionCache > 0 {
+		cfg.ClientSessionCache = sessionCache(s.SessionCache)
+		// Conceal an empty pre_shared_key on the first (cold-cache) connection.
+		cfg.OmitEmptyPsk = true
+	}
+
+	// Assemble a CA pool from the requested sources.
+	var pool *x509.CertPool
+	if systemRoots {
+		if sys, err := x509.SystemCertPool(); err == nil {
+			pool = sys
+		} else {
+			pool = x509.NewCertPool()
+		}
+	}
+	addPEM := func(pem []byte, src string) error {
+		if pool == nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(pem) {
+			return fmt.Errorf("failed to parse %s", src)
+		}
+		return nil
+	}
+	if s.RootCA != "" {
 		pem, err := os.ReadFile(s.RootCA)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("read root_ca: %w", err)
 		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, nil, nil, errors.New("failed to parse root_ca PEM")
+		if err := addPEM(pem, "root_ca"); err != nil {
+			return nil, nil, nil, err
 		}
+	}
+	if s.CAData != "" {
+		if err := addPEM([]byte(s.CAData), "cadata"); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	if s.CADir != "" {
+		entries, err := os.ReadDir(s.CADir)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("read ca_dir: %w", err)
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if pem, err := os.ReadFile(filepath.Join(s.CADir, e.Name())); err == nil {
+				if pool == nil {
+					pool = x509.NewCertPool()
+				}
+				pool.AppendCertsFromPEM(pem)
+			}
+		}
+	}
+
+	switch {
+	case !s.Verify:
+		cfg.InsecureSkipVerify = true
+	case !checkHostname:
+		// Verify the chain but not the hostname; also enforce pins.
+		cfg.InsecureSkipVerify = true
+		cfg.VerifyPeerCertificate = makeChainVerifier(pool, s.PinnedSHA256)
+	case len(s.PinnedSHA256) > 0:
+		cfg.RootCAs = pool
+		cfg.VerifyPeerCertificate = makePinVerifier(s.PinnedSHA256)
+	default:
 		cfg.RootCAs = pool
 	}
+
+	if cert, err := loadClientCert(s); err != nil {
+		return nil, nil, nil, err
+	} else if cert != nil {
+		cfg.Certificates = []utls.Certificate{*cert}
+	}
 	return &s, chs, cfg, nil
+}
+
+// loadClientCert builds a client certificate for mTLS from files or inline PEM.
+func loadClientCert(s specJSON) (*utls.Certificate, error) {
+	var certPEM, keyPEM []byte
+	switch {
+	case s.ClientCertPEM != "" || s.ClientKeyPEM != "":
+		certPEM, keyPEM = []byte(s.ClientCertPEM), []byte(s.ClientKeyPEM)
+	case s.ClientCert != "" || s.ClientKey != "":
+		var err error
+		if certPEM, err = os.ReadFile(s.ClientCert); err != nil {
+			return nil, fmt.Errorf("read client_cert: %w", err)
+		}
+		if keyPEM, err = os.ReadFile(s.ClientKey); err != nil {
+			return nil, fmt.Errorf("read client_key: %w", err)
+		}
+	default:
+		return nil, nil
+	}
+	c, err := utls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("client certificate: %w", err)
+	}
+	return &c, nil
+}
+
+func checkPins(cert *x509.Certificate, pins []string) error {
+	if len(pins) == 0 {
+		return nil
+	}
+	leaf := sha256.Sum256(cert.Raw)
+	spki := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	leafEnc := base64.StdEncoding.EncodeToString(leaf[:])
+	spkiEnc := base64.StdEncoding.EncodeToString(spki[:])
+	for _, p := range pins {
+		if p == leafEnc || p == spkiEnc {
+			return nil
+		}
+	}
+	return errors.New("certificate pin mismatch")
+}
+
+// makeChainVerifier verifies the peer chain (against roots) but not the
+// hostname, and enforces pins.
+func makeChainVerifier(roots *x509.CertPool, pins []string) func([][]byte, [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("no peer certificate")
+		}
+		certs := make([]*x509.Certificate, 0, len(rawCerts))
+		for _, raw := range rawCerts {
+			c, err := x509.ParseCertificate(raw)
+			if err != nil {
+				return err
+			}
+			certs = append(certs, c)
+		}
+		inter := x509.NewCertPool()
+		for _, c := range certs[1:] {
+			inter.AddCert(c)
+		}
+		if _, err := certs[0].Verify(x509.VerifyOptions{
+			Roots:         roots,
+			Intermediates: inter,
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		}); err != nil {
+			return err
+		}
+		return checkPins(certs[0], pins)
+	}
+}
+
+// makePinVerifier enforces pins while the normal Go verification runs.
+func makePinVerifier(pins []string) func([][]byte, [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("no peer certificate")
+		}
+		c, err := x509.ParseCertificate(rawCerts[0])
+		if err != nil {
+			return err
+		}
+		return checkPins(c, pins)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +546,15 @@ func cErr(s *session, err error) {
 //export freetls_version
 func freetls_version() *C.char {
 	return C.CString("freetls/0.0.1")
+}
+
+// ABI version of the C surface. Bump when an export's signature/semantics
+// changes incompatibly; the Python binding refuses to load on a major mismatch.
+const abiVersion = 1
+
+//export freetls_abi_version
+func freetls_abi_version() C.int {
+	return abiVersion
 }
 
 //export freetls_free
@@ -361,7 +583,13 @@ func (dummyConn) SetWriteDeadline(time.Time) error { return nil }
 // handshake message as hex (empty string on error). No network is used.
 //
 //export freetls_preset_raw
-func freetls_preset_raw(name *C.char) *C.char {
+func freetls_preset_raw(name *C.char) (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			auxErr = fmt.Sprintf("panic: %v", r)
+			out = C.CString("")
+		}
+	}()
 	id, ok := presetByName[C.GoString(name)]
 	if !ok {
 		return C.CString("")
@@ -439,7 +667,12 @@ func freetls_aux_error() *C.char {
 // freetls_preset_list returns a JSON array of known preset names.
 //
 //export freetls_preset_list
-func freetls_preset_list() *C.char {
+func freetls_preset_list() (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = C.CString("[]")
+		}
+	}()
 	names := make([]string, 0, len(presetByName))
 	for k := range presetByName {
 		names = append(names, k)
@@ -497,7 +730,13 @@ func applyALPN(uconn *utls.UConn, alpnJSON string) {
 // overrides (used to enumerate real-world variants). No network is used.
 //
 //export freetls_preset_raw_opts
-func freetls_preset_raw_opts(name *C.char, noSNI C.int, alpnJSON *C.char) *C.char {
+func freetls_preset_raw_opts(name *C.char, noSNI C.int, alpnJSON *C.char) (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			auxErr = fmt.Sprintf("panic: %v", r)
+			out = C.CString("")
+		}
+	}()
 	id, ok := presetByName[C.GoString(name)]
 	if !ok {
 		return C.CString("")
@@ -519,9 +758,17 @@ func freetls_preset_raw_opts(name *C.char, noSNI C.int, alpnJSON *C.char) *C.cha
 }
 
 //export freetls_session_new
-func freetls_session_new(specJSON *C.char) C.longlong {
+func freetls_session_new(specJSON *C.char) (id C.longlong) {
+	auxErr = ""
+	defer func() {
+		if r := recover(); r != nil {
+			auxErr = fmt.Sprintf("panic: %v", r)
+			id = 0
+		}
+	}()
 	s, chs, cfg, err := parseSpec(C.GoString(specJSON))
 	if err != nil {
+		auxErr = err.Error()
 		return 0
 	}
 	sess := &session{spec: chs, config: cfg, preset: s.Preset, chloJSON: s.ChloJSON,
@@ -530,12 +777,23 @@ func freetls_session_new(specJSON *C.char) C.longlong {
 	if s.TimeoutMS > 0 {
 		sess.timeout = time.Duration(s.TimeoutMS) * time.Millisecond
 	}
-	id := putSession(sess)
-	return C.longlong(id)
+	id = C.longlong(putSession(sess))
+	return id
+}
+
+// freetls_session_count returns the number of live sessions in the registry.
+// Used by tests to assert there are no leaks.
+//
+//export freetls_session_count
+func freetls_session_count() C.longlong {
+	regMu.Lock()
+	defer regMu.Unlock()
+	return C.longlong(len(registry))
 }
 
 //export freetls_session_free
 func freetls_session_free(h C.longlong) {
+	defer func() { _ = recover() }()
 	s := delSession(int64(h))
 	if s == nil {
 		return
@@ -642,7 +900,15 @@ func freetls_handshake(h C.longlong, fd C.int, sni *C.char) (rc C.int) {
 }
 
 //export freetls_read
-func freetls_read(h C.longlong, buf unsafe.Pointer, length C.longlong) C.longlong {
+func freetls_read(h C.longlong, buf unsafe.Pointer, length C.longlong) (rc C.longlong) {
+	defer func() {
+		if r := recover(); r != nil {
+			if s := getSession(int64(h)); s != nil {
+				cErr(s, fmt.Errorf("panic: %v", r))
+			}
+			rc = -99
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil || s.uconn == nil {
 		return -1
@@ -665,7 +931,15 @@ func freetls_read(h C.longlong, buf unsafe.Pointer, length C.longlong) C.longlon
 }
 
 //export freetls_write
-func freetls_write(h C.longlong, buf unsafe.Pointer, length C.longlong) C.longlong {
+func freetls_write(h C.longlong, buf unsafe.Pointer, length C.longlong) (rc C.longlong) {
+	defer func() {
+		if r := recover(); r != nil {
+			if s := getSession(int64(h)); s != nil {
+				cErr(s, fmt.Errorf("panic: %v", r))
+			}
+			rc = -99
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil || s.uconn == nil {
 		return -1
@@ -683,12 +957,29 @@ func freetls_write(h C.longlong, buf unsafe.Pointer, length C.longlong) C.longlo
 
 //export freetls_close
 func freetls_close(h C.longlong) {
+	defer func() { _ = recover() }()
 	s := getSession(int64(h))
 	if s == nil {
 		return
 	}
 	if s.uconn != nil {
 		_ = s.uconn.Close()
+	}
+}
+
+// freetls_set_timeout updates the per-session I/O timeout (milliseconds).
+//
+//export freetls_set_timeout
+func freetls_set_timeout(h C.longlong, ms C.int) {
+	defer func() { _ = recover() }()
+	s := getSession(int64(h))
+	if s == nil {
+		return
+	}
+	if ms <= 0 {
+		s.timeout = 0
+	} else {
+		s.timeout = time.Duration(ms) * time.Millisecond
 	}
 }
 
@@ -700,7 +991,12 @@ func hexOf(b []byte) *C.char {
 }
 
 //export freetls_get_client_hello
-func freetls_get_client_hello(h C.longlong) *C.char {
+func freetls_get_client_hello(h C.longlong) (rc *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			rc = C.CString("")
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil || s.tee == nil {
 		return C.CString("")
@@ -710,7 +1006,12 @@ func freetls_get_client_hello(h C.longlong) *C.char {
 }
 
 //export freetls_get_server_hello
-func freetls_get_server_hello(h C.longlong) *C.char {
+func freetls_get_server_hello(h C.longlong) (rc *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			rc = C.CString("")
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil || s.tee == nil {
 		return C.CString("")
@@ -720,16 +1021,26 @@ func freetls_get_server_hello(h C.longlong) *C.char {
 }
 
 type stateJSON struct {
-	Version     string `json:"version"`
-	CipherSuite uint16 `json:"cipher_suite"`
-	ALPN        string `json:"alpn"`
-	ServerName  string `json:"server_name"`
-	PeerCertB64 string `json:"peer_cert_b64,omitempty"`
-	Error       string `json:"error"`
+	Version      string   `json:"version"`
+	CipherSuite  uint16   `json:"cipher_suite"`
+	ALPN         string   `json:"alpn"`
+	ServerName   string   `json:"server_name"`
+	PeerCertB64  string   `json:"peer_cert_b64,omitempty"`
+	PeerCertsB64 []string `json:"peer_certs_b64,omitempty"`
+	DidResume    bool     `json:"did_resume"`
+	OCSPB64      string   `json:"ocsp_response_b64,omitempty"`
+	SCTB64       []string `json:"sct_b64,omitempty"`
+	ALPSB64      string   `json:"peer_alps_b64,omitempty"`
+	Error        string   `json:"error"`
 }
 
 //export freetls_get_state
-func freetls_get_state(h C.longlong) *C.char {
+func freetls_get_state(h C.longlong) (rc *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			rc = C.CString("{}")
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil {
 		return C.CString("{}")
@@ -741,8 +1052,22 @@ func freetls_get_state(h C.longlong) *C.char {
 		st.CipherSuite = uint16(cs.CipherSuite)
 		st.ALPN = cs.NegotiatedProtocol
 		st.ServerName = cs.ServerName
-		if len(cs.PeerCertificates) > 0 {
-			st.PeerCertB64 = base64.StdEncoding.EncodeToString(cs.PeerCertificates[0].Raw)
+		for _, c := range cs.PeerCertificates {
+			enc := base64.StdEncoding.EncodeToString(c.Raw)
+			st.PeerCertsB64 = append(st.PeerCertsB64, enc)
+		}
+		if len(st.PeerCertsB64) > 0 {
+			st.PeerCertB64 = st.PeerCertsB64[0]
+		}
+		st.DidResume = cs.DidResume
+		if len(cs.OCSPResponse) > 0 {
+			st.OCSPB64 = base64.StdEncoding.EncodeToString(cs.OCSPResponse)
+		}
+		for _, sct := range cs.SignedCertificateTimestamps {
+			st.SCTB64 = append(st.SCTB64, base64.StdEncoding.EncodeToString(sct))
+		}
+		if len(cs.PeerApplicationSettings) > 0 {
+			st.ALPSB64 = base64.StdEncoding.EncodeToString(cs.PeerApplicationSettings)
 		}
 	}
 	b, _ := json.Marshal(st)
@@ -750,7 +1075,12 @@ func freetls_get_state(h C.longlong) *C.char {
 }
 
 //export freetls_last_error
-func freetls_last_error(h C.longlong) *C.char {
+func freetls_last_error(h C.longlong) (rc *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			rc = C.CString("panic")
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil {
 		return C.CString("no such session")

@@ -1,13 +1,22 @@
 """End-to-end tests: real handshakes reproduce catalog fingerprints."""
+
 from __future__ import annotations
 
 import freetls
 from freetls import profiles
 
 # Browser presets that negotiate against a TLS 1.3 server.
-TLS13_ALIASES = ["chrome_155", "chrome_133", "firefox_148", "firefox_120",
-                 "edge_106", "safari_26_3", "safari_16_0",
-                 "chrome_133_h1", "chrome_133_nosni"]
+TLS13_ALIASES = [
+    "chrome_155",
+    "chrome_133",
+    "firefox_148",
+    "firefox_120",
+    "edge_106",
+    "safari_26_3",
+    "safari_16_0",
+    "chrome_133_h1",
+    "chrome_133_nosni",
+]
 
 
 def _connect(spec, port, sni):

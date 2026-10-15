@@ -1,7 +1,17 @@
-"""Fingerprint core: JA4, JA3, JA4S and the raw ClientHello parser."""
+"""Fingerprint core: JA4, JA3, JA4S and the raw ClientHello parser.
+
+JA4+ report-only calculators (JA4X, JA4T/JA4TS, JA4L/JA4LS, JA4H) live in the
+``ja4x``/``ja4t``/``ja4l``/``ja4h`` modules.
+"""
+
+from .chlo import chlo_json_from_raw
 from .ja3 import ja3_from_bytes, ja3_string, to_ja3
 from .ja4 import first_last_alpn, ja4_from_bytes, ja4_from_spec, to_ja4
+from .ja4h import ja4h, ja4h_from_request
+from .ja4l import ja4l, ja4l_c, ja4l_s
 from .ja4s import ja4s_from_bytes, to_ja4s
+from .ja4t import ja4t, ja4ts
+from .ja4x import ja4x, ja4x_from_cert, oid_to_hex
 from .parse import ClientHello, ServerHello, parse_client_hello, parse_server_hello
 
 __all__ = [
@@ -18,4 +28,15 @@ __all__ = [
     "ja4s_from_bytes",
     "ja3_string",
     "first_last_alpn",
+    "ja4x",
+    "ja4x_from_cert",
+    "oid_to_hex",
+    "ja4t",
+    "ja4ts",
+    "ja4l",
+    "ja4l_c",
+    "ja4l_s",
+    "ja4h",
+    "ja4h_from_request",
+    "chlo_json_from_raw",
 ]

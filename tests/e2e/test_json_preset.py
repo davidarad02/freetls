@@ -1,8 +1,10 @@
 """End-to-end: a JSON-defined (custom) preset drives a real handshake."""
+
 from __future__ import annotations
 
 import _build as B
-from freetls import FingerprintSpec, engine, profiles, TLSSession
+
+from freetls import FingerprintSpec, TLSSession, engine, profiles
 
 
 def test_chlo_json_handshake(tls_server_13):

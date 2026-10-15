@@ -3,15 +3,16 @@
 aiohttp drives connections through asyncio transports, so this module bridges
 the (blocking) freetls engine to an :class:`asyncio.Transport`.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
+import aiohappyeyeballs
 import aiohttp
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.connector import TCPConnector
-import aiohappyeyeballs
 
 from ..model import FingerprintSpec
 from ..session import TLSSession
@@ -71,7 +72,11 @@ class _FreetlsTransport(asyncio.Transport):
             return None
         if name == "peercert":
             return None
-        return self._session._sock.getsockname() if (name == "sockname" and self._session._sock) else default
+        return (
+            self._session._sock.getsockname()
+            if (name == "sockname" and self._session._sock)
+            else default
+        )
 
     def can_write_eof(self) -> bool:  # type: ignore[override]
         return False
@@ -84,18 +89,32 @@ class FreeTLSConnector(TCPConnector):
     connection.
     """
 
-    def __init__(self, spec: Optional[FingerprintSpec] = None,
-                 spec_factory: Optional[Callable[[], FingerprintSpec]] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        spec: FingerprintSpec | None = None,
+        spec_factory: Callable[[], FingerprintSpec] | None = None,
+        **kwargs,
+    ):
         if spec is None and spec_factory is None:
             raise ValueError("FreeTLSConnector requires spec= or spec_factory=")
         self._spec = spec
         self._spec_factory = spec_factory
-        self.last_session: Optional[TLSSession] = None
+        self.last_session: TLSSession | None = None
         super().__init__(**kwargs)
 
     def _build_spec(self) -> FingerprintSpec:
-        return self._spec_factory() if self._spec_factory else self._spec
+        spec = self._spec_factory() if self._spec_factory else self._spec
+        assert spec is not None
+        # aiohttp speaks HTTP/1.1 only, so never let ALPN negotiate h2 (which
+        # would leave the server expecting HTTP/2 frames). Strip it from the
+        # offered ALPN list.
+        spec = spec.copy()
+        alpn = spec.find("alpn")
+        if alpn is not None:
+            alpn.strings = [p for p in alpn.strings if p != "h2"] or ["http/1.1"]
+        if spec.preset_alpn is not None:
+            spec.preset_alpn = [p for p in spec.preset_alpn if p != "h2"] or ["http/1.1"]
+        return spec
 
     async def _wrap_create_connection(  # type: ignore[override]
         self,
@@ -117,9 +136,7 @@ class FreeTLSConnector(TCPConnector):
         spec = self._build_spec()
         session = TLSSession(spec)
         try:
-            await self._loop.run_in_executor(
-                None, session.wrap_socket, sock, req.host
-            )
+            await self._loop.run_in_executor(None, session.wrap_socket, sock, req.host)
         except Exception as exc:  # noqa: BLE001
             sock.close()
             raise client_error(req.connection_key, exc) from exc

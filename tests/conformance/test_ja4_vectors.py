@@ -1,7 +1,9 @@
 """Conformance tests against the FoxIO JA4 specification vectors."""
+
 from __future__ import annotations
 
 import _build as B
+
 from freetls.fingerprint import (
     first_last_alpn,
     ja4_from_bytes,
@@ -34,8 +36,23 @@ def test_first_last_alpn_non_ascii_reference_vectors():
 
 def _spec_client_hello() -> bytes:
     # From JA4.md worked example.
-    ciphers = [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F, 0xC02C, 0xC030, 0xCCA9,
-               0xCCA8, 0xC013, 0xC014, 0x009C, 0x009D, 0x002F, 0x0035]
+    ciphers = [
+        0x1301,
+        0x1302,
+        0x1303,
+        0xC02B,
+        0xC02F,
+        0xC02C,
+        0xC030,
+        0xCCA9,
+        0xCCA8,
+        0xC013,
+        0xC014,
+        0x009C,
+        0x009D,
+        0x002F,
+        0x0035,
+    ]
     sigalgs = [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601]
     extensions = [
         B.ext(0x001B),
@@ -76,8 +93,22 @@ def test_ja4_spec_worked_example():
 def test_ja4_no_sigalgs_extension_hash_vector():
     # JA4.md: extension list 0005,...,ff01 (with 000d present but empty) hashes
     # to 6d807ffa2a79 with no '_' suffix.
-    exts = [0x0005, 0x000A, 0x000B, 0x000D, 0x0012, 0x0015, 0x0017,
-            0x001B, 0x0023, 0x002B, 0x002D, 0x0033, 0x4469, 0xFF01]
+    exts = [
+        0x0005,
+        0x000A,
+        0x000B,
+        0x000D,
+        0x0012,
+        0x0015,
+        0x0017,
+        0x001B,
+        0x0023,
+        0x002B,
+        0x002D,
+        0x0033,
+        0x4469,
+        0xFF01,
+    ]
     extensions = []
     for e in exts:
         if e == 0x002B:
@@ -99,8 +130,7 @@ def test_ja4_empty_is_all_zero():
 def test_ja4s_server_hello_tls13():
     raw = B.build_server_hello(
         0x1301,
-        [B.ext(0x002B, b"\x03\x04"),
-         B.ext(0x0033, b"\x00\x1d\x00\x20" + b"\x00" * 32)],
+        [B.ext(0x002B, b"\x03\x04"), B.ext(0x0033, b"\x00\x1d\x00\x20" + b"\x00" * 32)],
         legacy_version=0x0303,
     )
     out = ja4s_from_bytes(raw)

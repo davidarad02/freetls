@@ -1,4 +1,5 @@
 """End-to-end tests for TLSContext.wrap_socket (ssl.SSLContext-style)."""
+
 from __future__ import annotations
 
 import socket

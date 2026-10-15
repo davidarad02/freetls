@@ -13,6 +13,7 @@ Every member is also just an ``int`` (so ``0x1301`` and
 ``Cipher.TLS_AES_128_GCM_SHA256`` are interchangeable), and lookups work by name
 string or value: ``Cipher["TLS_AES_128_GCM_SHA256"]``, ``Cipher(0x1301)``.
 """
+
 from __future__ import annotations
 
 import re

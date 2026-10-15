@@ -13,6 +13,7 @@ Profiles are emitted only when their JA4 is stable across repeated builds;
 JA3 (which is order-sensitive) is recorded only when it is stable too, and is
 left blank for extension-shuffling presets.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,7 +42,7 @@ VARIANTS = [
 def alias_for(preset: str, suffix: str) -> str:
     base = preset
     if base.startswith("Hello"):
-        base = base[len("Hello"):]
+        base = base[len("Hello") :]
     return base.lower() + suffix
 
 
@@ -53,10 +54,7 @@ def main() -> int:
         for suffix, no_sni, alpn in VARIANTS:
             # Build the variant several times: only include it when the JA4 is
             # stable (extension shufflers with GREASE-dependent padding vary).
-            raws = [
-                engine.preset_raw_opts(preset, no_sni=no_sni, alpn=alpn)
-                for _ in range(25)
-            ]
+            raws = [engine.preset_raw_opts(preset, no_sni=no_sni, alpn=alpn) for _ in range(25)]
             raws = [r for r in raws if r]
             if not raws:
                 continue
@@ -74,16 +72,18 @@ def main() -> int:
             if key in seen:
                 continue
             seen.add(key)
-            profiles.append({
-                "name": name,
-                "alias": alias,
-                "preset": preset,
-                "no_sni": no_sni,
-                "alpn": alpn,
-                "ja4": j4["ja4"],
-                "ja4_a": j4["ja4_a"],
-                "ja3": j3["ja3"],
-            })
+            profiles.append(
+                {
+                    "name": name,
+                    "alias": alias,
+                    "preset": preset,
+                    "no_sni": no_sni,
+                    "alpn": alpn,
+                    "ja4": j4["ja4"],
+                    "ja4_a": j4["ja4_a"],
+                    "ja3": j3["ja3"],
+                }
+            )
     catalog = {
         "generated_by": "tools/gen_catalog.py",
         "engine_version": engine.version(),

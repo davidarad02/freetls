@@ -1,8 +1,8 @@
 """Unit tests for the ssl.SSLContext-style TLSContext API."""
+
 from __future__ import annotations
 
-import freetls
-from freetls import TLSContext, TLS10, TLS12, TLS13
+from freetls import TLS12, TLS13, TLSContext
 
 
 def test_default_context_has_baseline_spec():

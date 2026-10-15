@@ -10,6 +10,7 @@ JA4S = t{version}{ext_count}{alpn}_{cipher}_{extensions_hash}
 - extensions_hash: sha256 of the ServerHello extension IDs in wire order,
   comma-joined hex, first 12 chars; '000000000000' if none.
 """
+
 from __future__ import annotations
 
 from hashlib import sha256

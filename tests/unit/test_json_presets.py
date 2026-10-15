@@ -1,11 +1,12 @@
 """Unit tests for JSON-defined presets and runtime profile registration."""
+
 from __future__ import annotations
 
 import json
 
+import _build as B
 import pytest
 
-import _build as B
 from freetls import FingerprintSpec, engine, profiles
 from freetls.errors import SpecError
 from freetls.fingerprint import ja4_from_bytes
@@ -59,12 +60,16 @@ def test_add_profile_unknown_preset_raises():
 
 def test_load_file(tmp_path):
     f = tmp_path / "extra.json"
-    f.write_text(json.dumps({
-        "profiles": [
-            {"name": "file_json", "chlo_json": B.CHLO_JSON},
-            {"name": "file_chrome", "preset": "HelloChrome_155", "alias": "file_chrome"},
-        ]
-    }))
+    f.write_text(
+        json.dumps(
+            {
+                "profiles": [
+                    {"name": "file_json", "chlo_json": B.CHLO_JSON},
+                    {"name": "file_chrome", "preset": "HelloChrome_155", "alias": "file_chrome"},
+                ]
+            }
+        )
+    )
     n = profiles.load_file(str(f))
     assert n == 2
     assert profiles.get("file_json") is not None
@@ -74,6 +79,12 @@ def test_load_file(tmp_path):
 def test_generated_preset_map_is_current():
     names = engine.preset_list()
     assert len(names) >= 40
-    for required in ("HelloChrome_155", "HelloFirefox_148", "HelloSafari_26_3",
-                     "HelloChrome_Auto", "HelloFirefox_Auto", "HelloSafari_Auto"):
+    for required in (
+        "HelloChrome_155",
+        "HelloFirefox_148",
+        "HelloSafari_26_3",
+        "HelloChrome_Auto",
+        "HelloFirefox_Auto",
+        "HelloSafari_Auto",
+    ):
         assert required in names, required
