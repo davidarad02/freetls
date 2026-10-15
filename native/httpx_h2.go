@@ -67,8 +67,20 @@ var validPseudo = map[string]string{
 	"path":      ":path",
 }
 
+// newH2Decoder builds an HPACK decoder whose dynamic table is sized to match
+// the HEADER_TABLE_SIZE we advertise in SETTINGS. Without this a peer may send
+// a dynamic table size update up to the advertised value and the decoder would
+// reject it as "too large".
+func newH2Decoder(maxTableSize uint32, emit func(hpack.HeaderField)) *hpack.Decoder {
+	d := hpack.NewDecoder(maxTableSize, emit)
+	d.SetMaxDynamicTableSize(maxTableSize)
+	d.SetAllowedMaxDynamicTableSize(maxTableSize)
+	return d
+}
+
 func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 	resp := &h2Response{Headers: [][2]string{}}
+	var bodyBuf []byte
 
 	// Resolve effective settings / window / pseudo order.
 	settings := req.Settings
@@ -87,6 +99,16 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 	resp.SentSettings = settings
 	resp.SentWindow = req.WindowUpdate
 	resp.SentPseudoOrder = order
+
+	// The HPACK decoder must allow a dynamic table at least as large as the
+	// HEADER_TABLE_SIZE we advertise, or a compliant peer's size update (which
+	// may grow up to the advertised value) is rejected as "too large".
+	headerTableSize := uint32(4096)
+	for _, s := range settings {
+		if s.ID == uint16(http2.SettingHeaderTableSize) {
+			headerTableSize = s.Value
+		}
+	}
 
 	if req.TimeoutMS > 0 {
 		_ = conn.SetDeadline(time.Now().Add(time.Duration(req.TimeoutMS) * time.Millisecond))
@@ -154,7 +176,7 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 	}
 
 	// 5. Read frames until the stream ends.
-	dec := hpack.NewDecoder(4096, func(f hpack.HeaderField) {
+	dec := newH2Decoder(headerTableSize, func(f hpack.HeaderField) {
 		if f.Name == ":status" {
 			fmt.Sscanf(f.Value, "%d", &resp.Status)
 		} else {
@@ -191,8 +213,8 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 				return nil, err
 			}
 		case *http2.DataFrame:
-			resp.BodyB64 += base64.StdEncoding.EncodeToString(f.Data())
 			if n := len(f.Data()); n > 0 {
+				bodyBuf = append(bodyBuf, f.Data()...)
 				_ = fr.WriteWindowUpdate(0, uint32(n))
 				_ = fr.WriteWindowUpdate(1, uint32(n))
 			}
@@ -203,6 +225,7 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 			done = true
 		}
 	}
+	resp.BodyB64 = base64.StdEncoding.EncodeToString(bodyBuf)
 	return resp, nil
 }
 

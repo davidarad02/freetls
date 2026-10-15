@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"io"
 	"net"
@@ -168,4 +169,102 @@ type byteWriter struct{ b *[]byte }
 func (w *byteWriter) Write(p []byte) (int, error) {
 	*w.b = append(*w.b, p...)
 	return len(p), nil
+}
+
+// TestH2BodyAcrossDataFrames guards against encoding each DATA frame's body to
+// base64 separately and concatenating (which corrupts padding across frames).
+// The client must return the concatenated raw body, base64-encoded once.
+func TestH2BodyAcrossDataFrames(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		preface := make([]byte, len(http2.ClientPreface))
+		if _, err := io.ReadFull(c, preface); err != nil {
+			return
+		}
+		fr := http2.NewFramer(c, c)
+		for {
+			f, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if _, ok := f.(*http2.HeadersFrame); ok {
+				break
+			}
+		}
+		_ = fr.WriteSettings()
+		var hb bytes.Buffer
+		enc := hpack.NewEncoder(&hb)
+		_ = enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
+		_ = fr.WriteHeaders(http2.HeadersFrameParam{
+			StreamID: 1, BlockFragment: hb.Bytes(), EndHeaders: true,
+		})
+		_ = fr.WriteData(1, false, []byte("abcde"))
+		_ = fr.WriteData(1, true, []byte("fg"))
+	}()
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	resp, err := doH2(conn, h2RequestSpec{Method: "GET", Scheme: "https", Authority: "x", Path: "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, want 200", resp.Status)
+	}
+	body, err := base64.StdEncoding.DecodeString(resp.BodyB64)
+	if err != nil {
+		t.Fatalf("body not valid base64: %v", err)
+	}
+	if string(body) != "abcdefg" {
+		t.Fatalf("body = %q, want %q", body, "abcdefg")
+	}
+}
+
+// TestH2DecoderAllowsAdvertisedTableSize guards the regression where the HPACK
+// decoder was fixed at 4096 bytes while SETTINGS advertised HEADER_TABLE_SIZE
+// 65536, so a peer's dynamic table size update (allowed up to the advertised
+// value) was rejected with "dynamic table size update too large".
+func TestH2DecoderAllowsAdvertisedTableSize(t *testing.T) {
+	// Raw dynamic table size update of 65536 (5-bit prefix integer), followed
+	// by an HPACK-encoded ":status: 200".
+	update := []byte{0x3f, 0xe1, 0xff, 0x03}
+	var enc bytes.Buffer
+	e := hpack.NewEncoder(&enc)
+	if err := e.WriteField(hpack.HeaderField{Name: ":status", Value: "200"}); err != nil {
+		t.Fatal(err)
+	}
+	block := append(append([]byte{}, update...), enc.Bytes()...)
+
+	var status string
+	ok := newH2Decoder(65536, func(f hpack.HeaderField) {
+		if f.Name == ":status" {
+			status = f.Value
+		}
+	})
+	if _, err := ok.Write(block); err != nil {
+		t.Fatalf("decoder rejected advertised table size update: %v", err)
+	}
+	if status != "200" {
+		t.Fatalf("status = %q, want 200", status)
+	}
+
+	// A decoder that only allows 4096 must reject the same update.
+	small := newH2Decoder(4096, func(hpack.HeaderField) {})
+	if _, err := small.Write(block); err == nil {
+		t.Fatal("expected a too-large dynamic table size update error")
+	}
 }
