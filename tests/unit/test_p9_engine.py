@@ -56,6 +56,26 @@ def test_ja4h_handles_odd_inputs():
     assert result["ja4h"].startswith("we")
 
 
+def test_public_submodules_are_exposed():
+    import freetls
+
+    for name in ("modes", "profiles", "verify", "sse", "engine", "transport", "JA4Adapter"):
+        assert hasattr(freetls, name), f"freetls.{name} is not exposed"
+    for name in ("modes", "profiles", "verify", "sse"):
+        assert name in freetls.__all__
+
+
+def test_transport_submodules_are_exposed():
+    import freetls.transport as transport
+
+    for name in ("websocket", "retry", "proxy", "urllib3_conn", "requests_adapter"):
+        assert hasattr(transport, name), f"freetls.transport.{name} is not exposed"
+    if pytest.importorskip("httpx") is not None:
+        assert hasattr(transport, "httpx_transport")
+    if pytest.importorskip("aiohttp") is not None:
+        assert hasattr(transport, "aiohttp_connector")
+
+
 def test_offline_ja4_counts_new_extension_kinds():
     from freetls import modes
     from freetls.fingerprint import ja4_from_spec

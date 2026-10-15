@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import modes, sse, verify
+from . import modes, profiles, sse, verify
 from .constants import Cipher, ExtensionType, NamedGroup, SignatureScheme
 from .context import TLSContext
 from .engine import version as engine_version
@@ -55,6 +55,7 @@ __all__ = [
     "TLSSession",
     "TLSContext",
     "modes",
+    "profiles",
     "verify",
     "sse",
     "JA4Adapter",
