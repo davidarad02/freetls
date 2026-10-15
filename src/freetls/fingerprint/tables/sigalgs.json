@@ -1,0 +1,251 @@
+{
+ "count": 49,
+ "entries": [
+  {
+   "hex": "0201",
+   "name": "rsa_pkcs1_sha1",
+   "value": 513
+  },
+  {
+   "hex": "0203",
+   "name": "ecdsa_sha1",
+   "value": 515
+  },
+  {
+   "hex": "0401",
+   "name": "rsa_pkcs1_sha256",
+   "value": 1025
+  },
+  {
+   "hex": "0403",
+   "name": "ecdsa_secp256r1_sha256",
+   "value": 1027
+  },
+  {
+   "hex": "0420",
+   "name": "rsa_pkcs1_sha256_legacy",
+   "value": 1056
+  },
+  {
+   "hex": "0501",
+   "name": "rsa_pkcs1_sha384",
+   "value": 1281
+  },
+  {
+   "hex": "0503",
+   "name": "ecdsa_secp384r1_sha384",
+   "value": 1283
+  },
+  {
+   "hex": "0520",
+   "name": "rsa_pkcs1_sha384_legacy",
+   "value": 1312
+  },
+  {
+   "hex": "0601",
+   "name": "rsa_pkcs1_sha512",
+   "value": 1537
+  },
+  {
+   "hex": "0603",
+   "name": "ecdsa_secp521r1_sha512",
+   "value": 1539
+  },
+  {
+   "hex": "0620",
+   "name": "rsa_pkcs1_sha512_legacy",
+   "value": 1568
+  },
+  {
+   "hex": "0704",
+   "name": "eccsi_sha256",
+   "value": 1796
+  },
+  {
+   "hex": "0705",
+   "name": "iso_ibs1",
+   "value": 1797
+  },
+  {
+   "hex": "0706",
+   "name": "iso_ibs2",
+   "value": 1798
+  },
+  {
+   "hex": "0707",
+   "name": "iso_chinese_ibs",
+   "value": 1799
+  },
+  {
+   "hex": "0708",
+   "name": "sm2sig_sm3",
+   "value": 1800
+  },
+  {
+   "hex": "0709",
+   "name": "gostr34102012_256a",
+   "value": 1801
+  },
+  {
+   "hex": "070a",
+   "name": "gostr34102012_256b",
+   "value": 1802
+  },
+  {
+   "hex": "070b",
+   "name": "gostr34102012_256c",
+   "value": 1803
+  },
+  {
+   "hex": "070c",
+   "name": "gostr34102012_256d",
+   "value": 1804
+  },
+  {
+   "hex": "070d",
+   "name": "gostr34102012_512a",
+   "value": 1805
+  },
+  {
+   "hex": "070e",
+   "name": "gostr34102012_512b",
+   "value": 1806
+  },
+  {
+   "hex": "070f",
+   "name": "gostr34102012_512c",
+   "value": 1807
+  },
+  {
+   "hex": "0804",
+   "name": "rsa_pss_rsae_sha256",
+   "value": 2052
+  },
+  {
+   "hex": "0805",
+   "name": "rsa_pss_rsae_sha384",
+   "value": 2053
+  },
+  {
+   "hex": "0806",
+   "name": "rsa_pss_rsae_sha512",
+   "value": 2054
+  },
+  {
+   "hex": "0807",
+   "name": "ed25519",
+   "value": 2055
+  },
+  {
+   "hex": "0808",
+   "name": "ed448",
+   "value": 2056
+  },
+  {
+   "hex": "0809",
+   "name": "rsa_pss_pss_sha256",
+   "value": 2057
+  },
+  {
+   "hex": "080a",
+   "name": "rsa_pss_pss_sha384",
+   "value": 2058
+  },
+  {
+   "hex": "080b",
+   "name": "rsa_pss_pss_sha512",
+   "value": 2059
+  },
+  {
+   "hex": "081a",
+   "name": "ecdsa_brainpoolP256r1tls13_sha256",
+   "value": 2074
+  },
+  {
+   "hex": "081b",
+   "name": "ecdsa_brainpoolP384r1tls13_sha384",
+   "value": 2075
+  },
+  {
+   "hex": "081c",
+   "name": "ecdsa_brainpoolP512r1tls13_sha512",
+   "value": 2076
+  },
+  {
+   "hex": "0904",
+   "name": "mldsa44",
+   "value": 2308
+  },
+  {
+   "hex": "0905",
+   "name": "mldsa65",
+   "value": 2309
+  },
+  {
+   "hex": "0906",
+   "name": "mldsa87",
+   "value": 2310
+  },
+  {
+   "hex": "0911",
+   "name": "slhdsa_sha2_128s",
+   "value": 2321
+  },
+  {
+   "hex": "0912",
+   "name": "slhdsa_sha2_128f",
+   "value": 2322
+  },
+  {
+   "hex": "0913",
+   "name": "slhdsa_sha2_192s",
+   "value": 2323
+  },
+  {
+   "hex": "0914",
+   "name": "slhdsa_sha2_192f",
+   "value": 2324
+  },
+  {
+   "hex": "0915",
+   "name": "slhdsa_sha2_256s",
+   "value": 2325
+  },
+  {
+   "hex": "0916",
+   "name": "slhdsa_sha2_256f",
+   "value": 2326
+  },
+  {
+   "hex": "0917",
+   "name": "slhdsa_shake_128s",
+   "value": 2327
+  },
+  {
+   "hex": "0918",
+   "name": "slhdsa_shake_128f",
+   "value": 2328
+  },
+  {
+   "hex": "0919",
+   "name": "slhdsa_shake_192s",
+   "value": 2329
+  },
+  {
+   "hex": "091a",
+   "name": "slhdsa_shake_192f",
+   "value": 2330
+  },
+  {
+   "hex": "091b",
+   "name": "slhdsa_shake_256s",
+   "value": 2331
+  },
+  {
+   "hex": "091c",
+   "name": "slhdsa_shake_256f",
+   "value": 2332
+  }
+ ],
+ "source": "https://www.iana.org/assignments/tls-parameters/tls-signaturescheme.csv"
+}

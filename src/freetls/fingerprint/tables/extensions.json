@@ -1,0 +1,326 @@
+{
+ "count": 64,
+ "entries": [
+  {
+   "hex": "0000",
+   "name": "server_name",
+   "value": 0
+  },
+  {
+   "hex": "0001",
+   "name": "max_fragment_length",
+   "value": 1
+  },
+  {
+   "hex": "0002",
+   "name": "client_certificate_url",
+   "value": 2
+  },
+  {
+   "hex": "0003",
+   "name": "trusted_ca_keys",
+   "value": 3
+  },
+  {
+   "hex": "0004",
+   "name": "truncated_hmac",
+   "value": 4
+  },
+  {
+   "hex": "0005",
+   "name": "status_request",
+   "value": 5
+  },
+  {
+   "hex": "0006",
+   "name": "user_mapping",
+   "value": 6
+  },
+  {
+   "hex": "0007",
+   "name": "client_authz",
+   "value": 7
+  },
+  {
+   "hex": "0008",
+   "name": "server_authz",
+   "value": 8
+  },
+  {
+   "hex": "0009",
+   "name": "cert_type",
+   "value": 9
+  },
+  {
+   "hex": "000a",
+   "name": "supported_groups (renamed from \"elliptic_curves\")",
+   "value": 10
+  },
+  {
+   "hex": "000b",
+   "name": "ec_point_formats",
+   "value": 11
+  },
+  {
+   "hex": "000c",
+   "name": "srp",
+   "value": 12
+  },
+  {
+   "hex": "000d",
+   "name": "signature_algorithms",
+   "value": 13
+  },
+  {
+   "hex": "000e",
+   "name": "use_srtp",
+   "value": 14
+  },
+  {
+   "hex": "000f",
+   "name": "heartbeat",
+   "value": 15
+  },
+  {
+   "hex": "0010",
+   "name": "application_layer_protocol_negotiation",
+   "value": 16
+  },
+  {
+   "hex": "0011",
+   "name": "status_request_v2",
+   "value": 17
+  },
+  {
+   "hex": "0012",
+   "name": "signed_certificate_timestamp",
+   "value": 18
+  },
+  {
+   "hex": "0013",
+   "name": "client_certificate_type",
+   "value": 19
+  },
+  {
+   "hex": "0014",
+   "name": "server_certificate_type",
+   "value": 20
+  },
+  {
+   "hex": "0015",
+   "name": "padding",
+   "value": 21
+  },
+  {
+   "hex": "0016",
+   "name": "encrypt_then_mac",
+   "value": 22
+  },
+  {
+   "hex": "0017",
+   "name": "extended_main_secret",
+   "value": 23
+  },
+  {
+   "hex": "0018",
+   "name": "token_binding",
+   "value": 24
+  },
+  {
+   "hex": "0019",
+   "name": "cached_info",
+   "value": 25
+  },
+  {
+   "hex": "001a",
+   "name": "tls_lts",
+   "value": 26
+  },
+  {
+   "hex": "001b",
+   "name": "compress_certificate",
+   "value": 27
+  },
+  {
+   "hex": "001c",
+   "name": "record_size_limit",
+   "value": 28
+  },
+  {
+   "hex": "001d",
+   "name": "pwd_protect",
+   "value": 29
+  },
+  {
+   "hex": "001e",
+   "name": "pwd_clear",
+   "value": 30
+  },
+  {
+   "hex": "001f",
+   "name": "password_salt",
+   "value": 31
+  },
+  {
+   "hex": "0020",
+   "name": "ticket_pinning",
+   "value": 32
+  },
+  {
+   "hex": "0021",
+   "name": "tls_cert_with_extern_psk",
+   "value": 33
+  },
+  {
+   "hex": "0022",
+   "name": "delegated_credential",
+   "value": 34
+  },
+  {
+   "hex": "0023",
+   "name": "session_ticket (renamed from \"SessionTicket TLS\")",
+   "value": 35
+  },
+  {
+   "hex": "0024",
+   "name": "TLMSP",
+   "value": 36
+  },
+  {
+   "hex": "0025",
+   "name": "TLMSP_proxying",
+   "value": 37
+  },
+  {
+   "hex": "0026",
+   "name": "TLMSP_delegate",
+   "value": 38
+  },
+  {
+   "hex": "0027",
+   "name": "supported_ekt_ciphers",
+   "value": 39
+  },
+  {
+   "hex": "0029",
+   "name": "pre_shared_key",
+   "value": 41
+  },
+  {
+   "hex": "002a",
+   "name": "early_data",
+   "value": 42
+  },
+  {
+   "hex": "002b",
+   "name": "supported_versions",
+   "value": 43
+  },
+  {
+   "hex": "002c",
+   "name": "cookie",
+   "value": 44
+  },
+  {
+   "hex": "002d",
+   "name": "psk_key_exchange_modes",
+   "value": 45
+  },
+  {
+   "hex": "002f",
+   "name": "certificate_authorities",
+   "value": 47
+  },
+  {
+   "hex": "0030",
+   "name": "oid_filters",
+   "value": 48
+  },
+  {
+   "hex": "0031",
+   "name": "post_handshake_auth",
+   "value": 49
+  },
+  {
+   "hex": "0032",
+   "name": "signature_algorithms_cert",
+   "value": 50
+  },
+  {
+   "hex": "0033",
+   "name": "key_share",
+   "value": 51
+  },
+  {
+   "hex": "0034",
+   "name": "transparency_info",
+   "value": 52
+  },
+  {
+   "hex": "0035",
+   "name": "connection_id (deprecated)",
+   "value": 53
+  },
+  {
+   "hex": "0036",
+   "name": "connection_id",
+   "value": 54
+  },
+  {
+   "hex": "0037",
+   "name": "external_id_hash",
+   "value": 55
+  },
+  {
+   "hex": "0038",
+   "name": "external_session_id",
+   "value": 56
+  },
+  {
+   "hex": "0039",
+   "name": "quic_transport_parameters",
+   "value": 57
+  },
+  {
+   "hex": "003a",
+   "name": "ticket_request",
+   "value": 58
+  },
+  {
+   "hex": "003b",
+   "name": "dnssec_chain",
+   "value": 59
+  },
+  {
+   "hex": "003c",
+   "name": "sequence_number_encryption_algorithms",
+   "value": 60
+  },
+  {
+   "hex": "003d",
+   "name": "rrc",
+   "value": 61
+  },
+  {
+   "hex": "003e",
+   "name": "tls_flags",
+   "value": 62
+  },
+  {
+   "hex": "fd00",
+   "name": "ech_outer_extensions",
+   "value": 64768
+  },
+  {
+   "hex": "fe0d",
+   "name": "encrypted_client_hello",
+   "value": 65037
+  },
+  {
+   "hex": "ff01",
+   "name": "renegotiation_info",
+   "value": 65281
+  }
+ ],
+ "source": "https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values-1.csv"
+}

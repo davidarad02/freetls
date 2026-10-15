@@ -1,0 +1,26 @@
+include README.md
+include AGENTS.md
+include Makefile
+include pyproject.toml
+include setup.py
+include MANIFEST.in
+
+# Go engine sources are required to build the native library from an sdist.
+recursive-include native *.go go.mod go.sum
+
+include tools/gen_tables.py
+include tools/gen_catalog.py
+recursive-include scripts *.sh
+
+recursive-include tests *.py *.cnf go.mod
+
+# Data shipped inside the package (also listed as package-data).
+recursive-include src/freetls/fingerprint/tables *.json
+recursive-include src/freetls/profiles *.json
+
+# Never ship build artifacts or caches.
+global-exclude *.so *.dylib *.dll *.h *.pyc
+prune .venv
+prune build
+prune dist
+prune dist_sdist

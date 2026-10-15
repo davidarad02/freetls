@@ -1,0 +1,1786 @@
+{
+ "count": 356,
+ "entries": [
+  {
+   "hex": "0000",
+   "name": "TLS_NULL_WITH_NULL_NULL",
+   "value": 0
+  },
+  {
+   "hex": "0001",
+   "name": "TLS_RSA_WITH_NULL_MD5",
+   "value": 1
+  },
+  {
+   "hex": "0002",
+   "name": "TLS_RSA_WITH_NULL_SHA",
+   "value": 2
+  },
+  {
+   "hex": "0003",
+   "name": "TLS_RSA_EXPORT_WITH_RC4_40_MD5",
+   "value": 3
+  },
+  {
+   "hex": "0004",
+   "name": "TLS_RSA_WITH_RC4_128_MD5",
+   "value": 4
+  },
+  {
+   "hex": "0005",
+   "name": "TLS_RSA_WITH_RC4_128_SHA",
+   "value": 5
+  },
+  {
+   "hex": "0006",
+   "name": "TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5",
+   "value": 6
+  },
+  {
+   "hex": "0007",
+   "name": "TLS_RSA_WITH_IDEA_CBC_SHA",
+   "value": 7
+  },
+  {
+   "hex": "0008",
+   "name": "TLS_RSA_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 8
+  },
+  {
+   "hex": "0009",
+   "name": "TLS_RSA_WITH_DES_CBC_SHA",
+   "value": 9
+  },
+  {
+   "hex": "000a",
+   "name": "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 10
+  },
+  {
+   "hex": "000b",
+   "name": "TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 11
+  },
+  {
+   "hex": "000c",
+   "name": "TLS_DH_DSS_WITH_DES_CBC_SHA",
+   "value": 12
+  },
+  {
+   "hex": "000d",
+   "name": "TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA",
+   "value": 13
+  },
+  {
+   "hex": "000e",
+   "name": "TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 14
+  },
+  {
+   "hex": "000f",
+   "name": "TLS_DH_RSA_WITH_DES_CBC_SHA",
+   "value": 15
+  },
+  {
+   "hex": "0010",
+   "name": "TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 16
+  },
+  {
+   "hex": "0011",
+   "name": "TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 17
+  },
+  {
+   "hex": "0012",
+   "name": "TLS_DHE_DSS_WITH_DES_CBC_SHA",
+   "value": 18
+  },
+  {
+   "hex": "0013",
+   "name": "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA",
+   "value": 19
+  },
+  {
+   "hex": "0014",
+   "name": "TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 20
+  },
+  {
+   "hex": "0015",
+   "name": "TLS_DHE_RSA_WITH_DES_CBC_SHA",
+   "value": 21
+  },
+  {
+   "hex": "0016",
+   "name": "TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 22
+  },
+  {
+   "hex": "0017",
+   "name": "TLS_DH_anon_EXPORT_WITH_RC4_40_MD5",
+   "value": 23
+  },
+  {
+   "hex": "0018",
+   "name": "TLS_DH_anon_WITH_RC4_128_MD5",
+   "value": 24
+  },
+  {
+   "hex": "0019",
+   "name": "TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA",
+   "value": 25
+  },
+  {
+   "hex": "001a",
+   "name": "TLS_DH_anon_WITH_DES_CBC_SHA",
+   "value": 26
+  },
+  {
+   "hex": "001b",
+   "name": "TLS_DH_anon_WITH_3DES_EDE_CBC_SHA",
+   "value": 27
+  },
+  {
+   "hex": "001e",
+   "name": "TLS_KRB5_WITH_DES_CBC_SHA",
+   "value": 30
+  },
+  {
+   "hex": "001f",
+   "name": "TLS_KRB5_WITH_3DES_EDE_CBC_SHA",
+   "value": 31
+  },
+  {
+   "hex": "0020",
+   "name": "TLS_KRB5_WITH_RC4_128_SHA",
+   "value": 32
+  },
+  {
+   "hex": "0021",
+   "name": "TLS_KRB5_WITH_IDEA_CBC_SHA",
+   "value": 33
+  },
+  {
+   "hex": "0022",
+   "name": "TLS_KRB5_WITH_DES_CBC_MD5",
+   "value": 34
+  },
+  {
+   "hex": "0023",
+   "name": "TLS_KRB5_WITH_3DES_EDE_CBC_MD5",
+   "value": 35
+  },
+  {
+   "hex": "0024",
+   "name": "TLS_KRB5_WITH_RC4_128_MD5",
+   "value": 36
+  },
+  {
+   "hex": "0025",
+   "name": "TLS_KRB5_WITH_IDEA_CBC_MD5",
+   "value": 37
+  },
+  {
+   "hex": "0026",
+   "name": "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA",
+   "value": 38
+  },
+  {
+   "hex": "0027",
+   "name": "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA",
+   "value": 39
+  },
+  {
+   "hex": "0028",
+   "name": "TLS_KRB5_EXPORT_WITH_RC4_40_SHA",
+   "value": 40
+  },
+  {
+   "hex": "0029",
+   "name": "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5",
+   "value": 41
+  },
+  {
+   "hex": "002a",
+   "name": "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5",
+   "value": 42
+  },
+  {
+   "hex": "002b",
+   "name": "TLS_KRB5_EXPORT_WITH_RC4_40_MD5",
+   "value": 43
+  },
+  {
+   "hex": "002c",
+   "name": "TLS_PSK_WITH_NULL_SHA",
+   "value": 44
+  },
+  {
+   "hex": "002d",
+   "name": "TLS_DHE_PSK_WITH_NULL_SHA",
+   "value": 45
+  },
+  {
+   "hex": "002e",
+   "name": "TLS_RSA_PSK_WITH_NULL_SHA",
+   "value": 46
+  },
+  {
+   "hex": "002f",
+   "name": "TLS_RSA_WITH_AES_128_CBC_SHA",
+   "value": 47
+  },
+  {
+   "hex": "0030",
+   "name": "TLS_DH_DSS_WITH_AES_128_CBC_SHA",
+   "value": 48
+  },
+  {
+   "hex": "0031",
+   "name": "TLS_DH_RSA_WITH_AES_128_CBC_SHA",
+   "value": 49
+  },
+  {
+   "hex": "0032",
+   "name": "TLS_DHE_DSS_WITH_AES_128_CBC_SHA",
+   "value": 50
+  },
+  {
+   "hex": "0033",
+   "name": "TLS_DHE_RSA_WITH_AES_128_CBC_SHA",
+   "value": 51
+  },
+  {
+   "hex": "0034",
+   "name": "TLS_DH_anon_WITH_AES_128_CBC_SHA",
+   "value": 52
+  },
+  {
+   "hex": "0035",
+   "name": "TLS_RSA_WITH_AES_256_CBC_SHA",
+   "value": 53
+  },
+  {
+   "hex": "0036",
+   "name": "TLS_DH_DSS_WITH_AES_256_CBC_SHA",
+   "value": 54
+  },
+  {
+   "hex": "0037",
+   "name": "TLS_DH_RSA_WITH_AES_256_CBC_SHA",
+   "value": 55
+  },
+  {
+   "hex": "0038",
+   "name": "TLS_DHE_DSS_WITH_AES_256_CBC_SHA",
+   "value": 56
+  },
+  {
+   "hex": "0039",
+   "name": "TLS_DHE_RSA_WITH_AES_256_CBC_SHA",
+   "value": 57
+  },
+  {
+   "hex": "003a",
+   "name": "TLS_DH_anon_WITH_AES_256_CBC_SHA",
+   "value": 58
+  },
+  {
+   "hex": "003b",
+   "name": "TLS_RSA_WITH_NULL_SHA256",
+   "value": 59
+  },
+  {
+   "hex": "003c",
+   "name": "TLS_RSA_WITH_AES_128_CBC_SHA256",
+   "value": 60
+  },
+  {
+   "hex": "003d",
+   "name": "TLS_RSA_WITH_AES_256_CBC_SHA256",
+   "value": 61
+  },
+  {
+   "hex": "003e",
+   "name": "TLS_DH_DSS_WITH_AES_128_CBC_SHA256",
+   "value": 62
+  },
+  {
+   "hex": "003f",
+   "name": "TLS_DH_RSA_WITH_AES_128_CBC_SHA256",
+   "value": 63
+  },
+  {
+   "hex": "0040",
+   "name": "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256",
+   "value": 64
+  },
+  {
+   "hex": "0041",
+   "name": "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 65
+  },
+  {
+   "hex": "0042",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 66
+  },
+  {
+   "hex": "0043",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 67
+  },
+  {
+   "hex": "0044",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 68
+  },
+  {
+   "hex": "0045",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 69
+  },
+  {
+   "hex": "0046",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA",
+   "value": 70
+  },
+  {
+   "hex": "0067",
+   "name": "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256",
+   "value": 103
+  },
+  {
+   "hex": "0068",
+   "name": "TLS_DH_DSS_WITH_AES_256_CBC_SHA256",
+   "value": 104
+  },
+  {
+   "hex": "0069",
+   "name": "TLS_DH_RSA_WITH_AES_256_CBC_SHA256",
+   "value": 105
+  },
+  {
+   "hex": "006a",
+   "name": "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256",
+   "value": 106
+  },
+  {
+   "hex": "006b",
+   "name": "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256",
+   "value": 107
+  },
+  {
+   "hex": "006c",
+   "name": "TLS_DH_anon_WITH_AES_128_CBC_SHA256",
+   "value": 108
+  },
+  {
+   "hex": "006d",
+   "name": "TLS_DH_anon_WITH_AES_256_CBC_SHA256",
+   "value": 109
+  },
+  {
+   "hex": "006e",
+   "name": "TLS_ASCONAEAD128_ASCONHASH256",
+   "value": 110
+  },
+  {
+   "hex": "006f",
+   "name": "TLS_ASCONAEAD128_SHA256",
+   "value": 111
+  },
+  {
+   "hex": "0070",
+   "name": "TLS_AES_128_GCM_ASCONHASH256",
+   "value": 112
+  },
+  {
+   "hex": "0071",
+   "name": "TLS_AES_128_CCM_ASCONHASH256",
+   "value": 113
+  },
+  {
+   "hex": "0084",
+   "name": "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 132
+  },
+  {
+   "hex": "0085",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 133
+  },
+  {
+   "hex": "0086",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 134
+  },
+  {
+   "hex": "0087",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 135
+  },
+  {
+   "hex": "0088",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 136
+  },
+  {
+   "hex": "0089",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA",
+   "value": 137
+  },
+  {
+   "hex": "008a",
+   "name": "TLS_PSK_WITH_RC4_128_SHA",
+   "value": 138
+  },
+  {
+   "hex": "008b",
+   "name": "TLS_PSK_WITH_3DES_EDE_CBC_SHA",
+   "value": 139
+  },
+  {
+   "hex": "008c",
+   "name": "TLS_PSK_WITH_AES_128_CBC_SHA",
+   "value": 140
+  },
+  {
+   "hex": "008d",
+   "name": "TLS_PSK_WITH_AES_256_CBC_SHA",
+   "value": 141
+  },
+  {
+   "hex": "008e",
+   "name": "TLS_DHE_PSK_WITH_RC4_128_SHA",
+   "value": 142
+  },
+  {
+   "hex": "008f",
+   "name": "TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA",
+   "value": 143
+  },
+  {
+   "hex": "0090",
+   "name": "TLS_DHE_PSK_WITH_AES_128_CBC_SHA",
+   "value": 144
+  },
+  {
+   "hex": "0091",
+   "name": "TLS_DHE_PSK_WITH_AES_256_CBC_SHA",
+   "value": 145
+  },
+  {
+   "hex": "0092",
+   "name": "TLS_RSA_PSK_WITH_RC4_128_SHA",
+   "value": 146
+  },
+  {
+   "hex": "0093",
+   "name": "TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA",
+   "value": 147
+  },
+  {
+   "hex": "0094",
+   "name": "TLS_RSA_PSK_WITH_AES_128_CBC_SHA",
+   "value": 148
+  },
+  {
+   "hex": "0095",
+   "name": "TLS_RSA_PSK_WITH_AES_256_CBC_SHA",
+   "value": 149
+  },
+  {
+   "hex": "0096",
+   "name": "TLS_RSA_WITH_SEED_CBC_SHA",
+   "value": 150
+  },
+  {
+   "hex": "0097",
+   "name": "TLS_DH_DSS_WITH_SEED_CBC_SHA",
+   "value": 151
+  },
+  {
+   "hex": "0098",
+   "name": "TLS_DH_RSA_WITH_SEED_CBC_SHA",
+   "value": 152
+  },
+  {
+   "hex": "0099",
+   "name": "TLS_DHE_DSS_WITH_SEED_CBC_SHA",
+   "value": 153
+  },
+  {
+   "hex": "009a",
+   "name": "TLS_DHE_RSA_WITH_SEED_CBC_SHA",
+   "value": 154
+  },
+  {
+   "hex": "009b",
+   "name": "TLS_DH_anon_WITH_SEED_CBC_SHA",
+   "value": 155
+  },
+  {
+   "hex": "009c",
+   "name": "TLS_RSA_WITH_AES_128_GCM_SHA256",
+   "value": 156
+  },
+  {
+   "hex": "009d",
+   "name": "TLS_RSA_WITH_AES_256_GCM_SHA384",
+   "value": 157
+  },
+  {
+   "hex": "009e",
+   "name": "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+   "value": 158
+  },
+  {
+   "hex": "009f",
+   "name": "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+   "value": 159
+  },
+  {
+   "hex": "00a0",
+   "name": "TLS_DH_RSA_WITH_AES_128_GCM_SHA256",
+   "value": 160
+  },
+  {
+   "hex": "00a1",
+   "name": "TLS_DH_RSA_WITH_AES_256_GCM_SHA384",
+   "value": 161
+  },
+  {
+   "hex": "00a2",
+   "name": "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256",
+   "value": 162
+  },
+  {
+   "hex": "00a3",
+   "name": "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384",
+   "value": 163
+  },
+  {
+   "hex": "00a4",
+   "name": "TLS_DH_DSS_WITH_AES_128_GCM_SHA256",
+   "value": 164
+  },
+  {
+   "hex": "00a5",
+   "name": "TLS_DH_DSS_WITH_AES_256_GCM_SHA384",
+   "value": 165
+  },
+  {
+   "hex": "00a6",
+   "name": "TLS_DH_anon_WITH_AES_128_GCM_SHA256",
+   "value": 166
+  },
+  {
+   "hex": "00a7",
+   "name": "TLS_DH_anon_WITH_AES_256_GCM_SHA384",
+   "value": 167
+  },
+  {
+   "hex": "00a8",
+   "name": "TLS_PSK_WITH_AES_128_GCM_SHA256",
+   "value": 168
+  },
+  {
+   "hex": "00a9",
+   "name": "TLS_PSK_WITH_AES_256_GCM_SHA384",
+   "value": 169
+  },
+  {
+   "hex": "00aa",
+   "name": "TLS_DHE_PSK_WITH_AES_128_GCM_SHA256",
+   "value": 170
+  },
+  {
+   "hex": "00ab",
+   "name": "TLS_DHE_PSK_WITH_AES_256_GCM_SHA384",
+   "value": 171
+  },
+  {
+   "hex": "00ac",
+   "name": "TLS_RSA_PSK_WITH_AES_128_GCM_SHA256",
+   "value": 172
+  },
+  {
+   "hex": "00ad",
+   "name": "TLS_RSA_PSK_WITH_AES_256_GCM_SHA384",
+   "value": 173
+  },
+  {
+   "hex": "00ae",
+   "name": "TLS_PSK_WITH_AES_128_CBC_SHA256",
+   "value": 174
+  },
+  {
+   "hex": "00af",
+   "name": "TLS_PSK_WITH_AES_256_CBC_SHA384",
+   "value": 175
+  },
+  {
+   "hex": "00b0",
+   "name": "TLS_PSK_WITH_NULL_SHA256",
+   "value": 176
+  },
+  {
+   "hex": "00b1",
+   "name": "TLS_PSK_WITH_NULL_SHA384",
+   "value": 177
+  },
+  {
+   "hex": "00b2",
+   "name": "TLS_DHE_PSK_WITH_AES_128_CBC_SHA256",
+   "value": 178
+  },
+  {
+   "hex": "00b3",
+   "name": "TLS_DHE_PSK_WITH_AES_256_CBC_SHA384",
+   "value": 179
+  },
+  {
+   "hex": "00b4",
+   "name": "TLS_DHE_PSK_WITH_NULL_SHA256",
+   "value": 180
+  },
+  {
+   "hex": "00b5",
+   "name": "TLS_DHE_PSK_WITH_NULL_SHA384",
+   "value": 181
+  },
+  {
+   "hex": "00b6",
+   "name": "TLS_RSA_PSK_WITH_AES_128_CBC_SHA256",
+   "value": 182
+  },
+  {
+   "hex": "00b7",
+   "name": "TLS_RSA_PSK_WITH_AES_256_CBC_SHA384",
+   "value": 183
+  },
+  {
+   "hex": "00b8",
+   "name": "TLS_RSA_PSK_WITH_NULL_SHA256",
+   "value": 184
+  },
+  {
+   "hex": "00b9",
+   "name": "TLS_RSA_PSK_WITH_NULL_SHA384",
+   "value": 185
+  },
+  {
+   "hex": "00ba",
+   "name": "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 186
+  },
+  {
+   "hex": "00bb",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 187
+  },
+  {
+   "hex": "00bc",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 188
+  },
+  {
+   "hex": "00bd",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 189
+  },
+  {
+   "hex": "00be",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 190
+  },
+  {
+   "hex": "00bf",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 191
+  },
+  {
+   "hex": "00c0",
+   "name": "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 192
+  },
+  {
+   "hex": "00c1",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 193
+  },
+  {
+   "hex": "00c2",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 194
+  },
+  {
+   "hex": "00c3",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 195
+  },
+  {
+   "hex": "00c4",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 196
+  },
+  {
+   "hex": "00c5",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256",
+   "value": 197
+  },
+  {
+   "hex": "00c6",
+   "name": "TLS_SM4_GCM_SM3",
+   "value": 198
+  },
+  {
+   "hex": "00c7",
+   "name": "TLS_SM4_CCM_SM3",
+   "value": 199
+  },
+  {
+   "hex": "00ff",
+   "name": "TLS_EMPTY_RENEGOTIATION_INFO_SCSV",
+   "value": 255
+  },
+  {
+   "hex": "1301",
+   "name": "TLS_AES_128_GCM_SHA256",
+   "value": 4865
+  },
+  {
+   "hex": "1302",
+   "name": "TLS_AES_256_GCM_SHA384",
+   "value": 4866
+  },
+  {
+   "hex": "1303",
+   "name": "TLS_CHACHA20_POLY1305_SHA256",
+   "value": 4867
+  },
+  {
+   "hex": "1304",
+   "name": "TLS_AES_128_CCM_SHA256",
+   "value": 4868
+  },
+  {
+   "hex": "1305",
+   "name": "TLS_AES_128_CCM_8_SHA256",
+   "value": 4869
+  },
+  {
+   "hex": "1306",
+   "name": "TLS_AEGIS_256_SHA512",
+   "value": 4870
+  },
+  {
+   "hex": "1307",
+   "name": "TLS_AEGIS_128L_SHA256",
+   "value": 4871
+  },
+  {
+   "hex": "5600",
+   "name": "TLS_FALLBACK_SCSV",
+   "value": 22016
+  },
+  {
+   "hex": "c001",
+   "name": "TLS_ECDH_ECDSA_WITH_NULL_SHA",
+   "value": 49153
+  },
+  {
+   "hex": "c002",
+   "name": "TLS_ECDH_ECDSA_WITH_RC4_128_SHA",
+   "value": 49154
+  },
+  {
+   "hex": "c003",
+   "name": "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49155
+  },
+  {
+   "hex": "c004",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA",
+   "value": 49156
+  },
+  {
+   "hex": "c005",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA",
+   "value": 49157
+  },
+  {
+   "hex": "c006",
+   "name": "TLS_ECDHE_ECDSA_WITH_NULL_SHA",
+   "value": 49158
+  },
+  {
+   "hex": "c007",
+   "name": "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA",
+   "value": 49159
+  },
+  {
+   "hex": "c008",
+   "name": "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49160
+  },
+  {
+   "hex": "c009",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+   "value": 49161
+  },
+  {
+   "hex": "c00a",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+   "value": 49162
+  },
+  {
+   "hex": "c00b",
+   "name": "TLS_ECDH_RSA_WITH_NULL_SHA",
+   "value": 49163
+  },
+  {
+   "hex": "c00c",
+   "name": "TLS_ECDH_RSA_WITH_RC4_128_SHA",
+   "value": 49164
+  },
+  {
+   "hex": "c00d",
+   "name": "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49165
+  },
+  {
+   "hex": "c00e",
+   "name": "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA",
+   "value": 49166
+  },
+  {
+   "hex": "c00f",
+   "name": "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA",
+   "value": 49167
+  },
+  {
+   "hex": "c010",
+   "name": "TLS_ECDHE_RSA_WITH_NULL_SHA",
+   "value": 49168
+  },
+  {
+   "hex": "c011",
+   "name": "TLS_ECDHE_RSA_WITH_RC4_128_SHA",
+   "value": 49169
+  },
+  {
+   "hex": "c012",
+   "name": "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49170
+  },
+  {
+   "hex": "c013",
+   "name": "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+   "value": 49171
+  },
+  {
+   "hex": "c014",
+   "name": "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+   "value": 49172
+  },
+  {
+   "hex": "c015",
+   "name": "TLS_ECDH_anon_WITH_NULL_SHA",
+   "value": 49173
+  },
+  {
+   "hex": "c016",
+   "name": "TLS_ECDH_anon_WITH_RC4_128_SHA",
+   "value": 49174
+  },
+  {
+   "hex": "c017",
+   "name": "TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA",
+   "value": 49175
+  },
+  {
+   "hex": "c018",
+   "name": "TLS_ECDH_anon_WITH_AES_128_CBC_SHA",
+   "value": 49176
+  },
+  {
+   "hex": "c019",
+   "name": "TLS_ECDH_anon_WITH_AES_256_CBC_SHA",
+   "value": 49177
+  },
+  {
+   "hex": "c01a",
+   "name": "TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49178
+  },
+  {
+   "hex": "c01b",
+   "name": "TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA",
+   "value": 49179
+  },
+  {
+   "hex": "c01c",
+   "name": "TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA",
+   "value": 49180
+  },
+  {
+   "hex": "c01d",
+   "name": "TLS_SRP_SHA_WITH_AES_128_CBC_SHA",
+   "value": 49181
+  },
+  {
+   "hex": "c01e",
+   "name": "TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA",
+   "value": 49182
+  },
+  {
+   "hex": "c01f",
+   "name": "TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA",
+   "value": 49183
+  },
+  {
+   "hex": "c020",
+   "name": "TLS_SRP_SHA_WITH_AES_256_CBC_SHA",
+   "value": 49184
+  },
+  {
+   "hex": "c021",
+   "name": "TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA",
+   "value": 49185
+  },
+  {
+   "hex": "c022",
+   "name": "TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA",
+   "value": 49186
+  },
+  {
+   "hex": "c023",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+   "value": 49187
+  },
+  {
+   "hex": "c024",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+   "value": 49188
+  },
+  {
+   "hex": "c025",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256",
+   "value": 49189
+  },
+  {
+   "hex": "c026",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384",
+   "value": 49190
+  },
+  {
+   "hex": "c027",
+   "name": "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+   "value": 49191
+  },
+  {
+   "hex": "c028",
+   "name": "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+   "value": 49192
+  },
+  {
+   "hex": "c029",
+   "name": "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256",
+   "value": 49193
+  },
+  {
+   "hex": "c02a",
+   "name": "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384",
+   "value": 49194
+  },
+  {
+   "hex": "c02b",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+   "value": 49195
+  },
+  {
+   "hex": "c02c",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+   "value": 49196
+  },
+  {
+   "hex": "c02d",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256",
+   "value": 49197
+  },
+  {
+   "hex": "c02e",
+   "name": "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384",
+   "value": 49198
+  },
+  {
+   "hex": "c02f",
+   "name": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+   "value": 49199
+  },
+  {
+   "hex": "c030",
+   "name": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+   "value": 49200
+  },
+  {
+   "hex": "c031",
+   "name": "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256",
+   "value": 49201
+  },
+  {
+   "hex": "c032",
+   "name": "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384",
+   "value": 49202
+  },
+  {
+   "hex": "c033",
+   "name": "TLS_ECDHE_PSK_WITH_RC4_128_SHA",
+   "value": 49203
+  },
+  {
+   "hex": "c034",
+   "name": "TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA",
+   "value": 49204
+  },
+  {
+   "hex": "c035",
+   "name": "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA",
+   "value": 49205
+  },
+  {
+   "hex": "c036",
+   "name": "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA",
+   "value": 49206
+  },
+  {
+   "hex": "c037",
+   "name": "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256",
+   "value": 49207
+  },
+  {
+   "hex": "c038",
+   "name": "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384",
+   "value": 49208
+  },
+  {
+   "hex": "c039",
+   "name": "TLS_ECDHE_PSK_WITH_NULL_SHA",
+   "value": 49209
+  },
+  {
+   "hex": "c03a",
+   "name": "TLS_ECDHE_PSK_WITH_NULL_SHA256",
+   "value": 49210
+  },
+  {
+   "hex": "c03b",
+   "name": "TLS_ECDHE_PSK_WITH_NULL_SHA384",
+   "value": 49211
+  },
+  {
+   "hex": "c03c",
+   "name": "TLS_RSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49212
+  },
+  {
+   "hex": "c03d",
+   "name": "TLS_RSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49213
+  },
+  {
+   "hex": "c03e",
+   "name": "TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256",
+   "value": 49214
+  },
+  {
+   "hex": "c03f",
+   "name": "TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384",
+   "value": 49215
+  },
+  {
+   "hex": "c040",
+   "name": "TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49216
+  },
+  {
+   "hex": "c041",
+   "name": "TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49217
+  },
+  {
+   "hex": "c042",
+   "name": "TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256",
+   "value": 49218
+  },
+  {
+   "hex": "c043",
+   "name": "TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384",
+   "value": 49219
+  },
+  {
+   "hex": "c044",
+   "name": "TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49220
+  },
+  {
+   "hex": "c045",
+   "name": "TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49221
+  },
+  {
+   "hex": "c046",
+   "name": "TLS_DH_anon_WITH_ARIA_128_CBC_SHA256",
+   "value": 49222
+  },
+  {
+   "hex": "c047",
+   "name": "TLS_DH_anon_WITH_ARIA_256_CBC_SHA384",
+   "value": 49223
+  },
+  {
+   "hex": "c048",
+   "name": "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49224
+  },
+  {
+   "hex": "c049",
+   "name": "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49225
+  },
+  {
+   "hex": "c04a",
+   "name": "TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49226
+  },
+  {
+   "hex": "c04b",
+   "name": "TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49227
+  },
+  {
+   "hex": "c04c",
+   "name": "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49228
+  },
+  {
+   "hex": "c04d",
+   "name": "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49229
+  },
+  {
+   "hex": "c04e",
+   "name": "TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256",
+   "value": 49230
+  },
+  {
+   "hex": "c04f",
+   "name": "TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384",
+   "value": 49231
+  },
+  {
+   "hex": "c050",
+   "name": "TLS_RSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49232
+  },
+  {
+   "hex": "c051",
+   "name": "TLS_RSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49233
+  },
+  {
+   "hex": "c052",
+   "name": "TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49234
+  },
+  {
+   "hex": "c053",
+   "name": "TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49235
+  },
+  {
+   "hex": "c054",
+   "name": "TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49236
+  },
+  {
+   "hex": "c055",
+   "name": "TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49237
+  },
+  {
+   "hex": "c056",
+   "name": "TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256",
+   "value": 49238
+  },
+  {
+   "hex": "c057",
+   "name": "TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384",
+   "value": 49239
+  },
+  {
+   "hex": "c058",
+   "name": "TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256",
+   "value": 49240
+  },
+  {
+   "hex": "c059",
+   "name": "TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384",
+   "value": 49241
+  },
+  {
+   "hex": "c05a",
+   "name": "TLS_DH_anon_WITH_ARIA_128_GCM_SHA256",
+   "value": 49242
+  },
+  {
+   "hex": "c05b",
+   "name": "TLS_DH_anon_WITH_ARIA_256_GCM_SHA384",
+   "value": 49243
+  },
+  {
+   "hex": "c05c",
+   "name": "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49244
+  },
+  {
+   "hex": "c05d",
+   "name": "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49245
+  },
+  {
+   "hex": "c05e",
+   "name": "TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49246
+  },
+  {
+   "hex": "c05f",
+   "name": "TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49247
+  },
+  {
+   "hex": "c060",
+   "name": "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49248
+  },
+  {
+   "hex": "c061",
+   "name": "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49249
+  },
+  {
+   "hex": "c062",
+   "name": "TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256",
+   "value": 49250
+  },
+  {
+   "hex": "c063",
+   "name": "TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384",
+   "value": 49251
+  },
+  {
+   "hex": "c064",
+   "name": "TLS_PSK_WITH_ARIA_128_CBC_SHA256",
+   "value": 49252
+  },
+  {
+   "hex": "c065",
+   "name": "TLS_PSK_WITH_ARIA_256_CBC_SHA384",
+   "value": 49253
+  },
+  {
+   "hex": "c066",
+   "name": "TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256",
+   "value": 49254
+  },
+  {
+   "hex": "c067",
+   "name": "TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384",
+   "value": 49255
+  },
+  {
+   "hex": "c068",
+   "name": "TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256",
+   "value": 49256
+  },
+  {
+   "hex": "c069",
+   "name": "TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384",
+   "value": 49257
+  },
+  {
+   "hex": "c06a",
+   "name": "TLS_PSK_WITH_ARIA_128_GCM_SHA256",
+   "value": 49258
+  },
+  {
+   "hex": "c06b",
+   "name": "TLS_PSK_WITH_ARIA_256_GCM_SHA384",
+   "value": 49259
+  },
+  {
+   "hex": "c06c",
+   "name": "TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256",
+   "value": 49260
+  },
+  {
+   "hex": "c06d",
+   "name": "TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384",
+   "value": 49261
+  },
+  {
+   "hex": "c06e",
+   "name": "TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256",
+   "value": 49262
+  },
+  {
+   "hex": "c06f",
+   "name": "TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384",
+   "value": 49263
+  },
+  {
+   "hex": "c070",
+   "name": "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256",
+   "value": 49264
+  },
+  {
+   "hex": "c071",
+   "name": "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384",
+   "value": 49265
+  },
+  {
+   "hex": "c072",
+   "name": "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49266
+  },
+  {
+   "hex": "c073",
+   "name": "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49267
+  },
+  {
+   "hex": "c074",
+   "name": "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49268
+  },
+  {
+   "hex": "c075",
+   "name": "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49269
+  },
+  {
+   "hex": "c076",
+   "name": "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49270
+  },
+  {
+   "hex": "c077",
+   "name": "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49271
+  },
+  {
+   "hex": "c078",
+   "name": "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49272
+  },
+  {
+   "hex": "c079",
+   "name": "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49273
+  },
+  {
+   "hex": "c07a",
+   "name": "TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49274
+  },
+  {
+   "hex": "c07b",
+   "name": "TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49275
+  },
+  {
+   "hex": "c07c",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49276
+  },
+  {
+   "hex": "c07d",
+   "name": "TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49277
+  },
+  {
+   "hex": "c07e",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49278
+  },
+  {
+   "hex": "c07f",
+   "name": "TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49279
+  },
+  {
+   "hex": "c080",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49280
+  },
+  {
+   "hex": "c081",
+   "name": "TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49281
+  },
+  {
+   "hex": "c082",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49282
+  },
+  {
+   "hex": "c083",
+   "name": "TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49283
+  },
+  {
+   "hex": "c084",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49284
+  },
+  {
+   "hex": "c085",
+   "name": "TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49285
+  },
+  {
+   "hex": "c086",
+   "name": "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49286
+  },
+  {
+   "hex": "c087",
+   "name": "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49287
+  },
+  {
+   "hex": "c088",
+   "name": "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49288
+  },
+  {
+   "hex": "c089",
+   "name": "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49289
+  },
+  {
+   "hex": "c08a",
+   "name": "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49290
+  },
+  {
+   "hex": "c08b",
+   "name": "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49291
+  },
+  {
+   "hex": "c08c",
+   "name": "TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49292
+  },
+  {
+   "hex": "c08d",
+   "name": "TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49293
+  },
+  {
+   "hex": "c08e",
+   "name": "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49294
+  },
+  {
+   "hex": "c08f",
+   "name": "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49295
+  },
+  {
+   "hex": "c090",
+   "name": "TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49296
+  },
+  {
+   "hex": "c091",
+   "name": "TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49297
+  },
+  {
+   "hex": "c092",
+   "name": "TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256",
+   "value": 49298
+  },
+  {
+   "hex": "c093",
+   "name": "TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384",
+   "value": 49299
+  },
+  {
+   "hex": "c094",
+   "name": "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49300
+  },
+  {
+   "hex": "c095",
+   "name": "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49301
+  },
+  {
+   "hex": "c096",
+   "name": "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49302
+  },
+  {
+   "hex": "c097",
+   "name": "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49303
+  },
+  {
+   "hex": "c098",
+   "name": "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49304
+  },
+  {
+   "hex": "c099",
+   "name": "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49305
+  },
+  {
+   "hex": "c09a",
+   "name": "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+   "value": 49306
+  },
+  {
+   "hex": "c09b",
+   "name": "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384",
+   "value": 49307
+  },
+  {
+   "hex": "c09c",
+   "name": "TLS_RSA_WITH_AES_128_CCM",
+   "value": 49308
+  },
+  {
+   "hex": "c09d",
+   "name": "TLS_RSA_WITH_AES_256_CCM",
+   "value": 49309
+  },
+  {
+   "hex": "c09e",
+   "name": "TLS_DHE_RSA_WITH_AES_128_CCM",
+   "value": 49310
+  },
+  {
+   "hex": "c09f",
+   "name": "TLS_DHE_RSA_WITH_AES_256_CCM",
+   "value": 49311
+  },
+  {
+   "hex": "c0a0",
+   "name": "TLS_RSA_WITH_AES_128_CCM_8",
+   "value": 49312
+  },
+  {
+   "hex": "c0a1",
+   "name": "TLS_RSA_WITH_AES_256_CCM_8",
+   "value": 49313
+  },
+  {
+   "hex": "c0a2",
+   "name": "TLS_DHE_RSA_WITH_AES_128_CCM_8",
+   "value": 49314
+  },
+  {
+   "hex": "c0a3",
+   "name": "TLS_DHE_RSA_WITH_AES_256_CCM_8",
+   "value": 49315
+  },
+  {
+   "hex": "c0a4",
+   "name": "TLS_PSK_WITH_AES_128_CCM",
+   "value": 49316
+  },
+  {
+   "hex": "c0a5",
+   "name": "TLS_PSK_WITH_AES_256_CCM",
+   "value": 49317
+  },
+  {
+   "hex": "c0a6",
+   "name": "TLS_DHE_PSK_WITH_AES_128_CCM",
+   "value": 49318
+  },
+  {
+   "hex": "c0a7",
+   "name": "TLS_DHE_PSK_WITH_AES_256_CCM",
+   "value": 49319
+  },
+  {
+   "hex": "c0a8",
+   "name": "TLS_PSK_WITH_AES_128_CCM_8",
+   "value": 49320
+  },
+  {
+   "hex": "c0a9",
+   "name": "TLS_PSK_WITH_AES_256_CCM_8",
+   "value": 49321
+  },
+  {
+   "hex": "c0aa",
+   "name": "TLS_PSK_DHE_WITH_AES_128_CCM_8",
+   "value": 49322
+  },
+  {
+   "hex": "c0ab",
+   "name": "TLS_PSK_DHE_WITH_AES_256_CCM_8",
+   "value": 49323
+  },
+  {
+   "hex": "c0ac",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_128_CCM",
+   "value": 49324
+  },
+  {
+   "hex": "c0ad",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_256_CCM",
+   "value": 49325
+  },
+  {
+   "hex": "c0ae",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8",
+   "value": 49326
+  },
+  {
+   "hex": "c0af",
+   "name": "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8",
+   "value": 49327
+  },
+  {
+   "hex": "c0b0",
+   "name": "TLS_ECCPWD_WITH_AES_128_GCM_SHA256",
+   "value": 49328
+  },
+  {
+   "hex": "c0b1",
+   "name": "TLS_ECCPWD_WITH_AES_256_GCM_SHA384",
+   "value": 49329
+  },
+  {
+   "hex": "c0b2",
+   "name": "TLS_ECCPWD_WITH_AES_128_CCM_SHA256",
+   "value": 49330
+  },
+  {
+   "hex": "c0b3",
+   "name": "TLS_ECCPWD_WITH_AES_256_CCM_SHA384",
+   "value": 49331
+  },
+  {
+   "hex": "c0b4",
+   "name": "TLS_SHA256_SHA256",
+   "value": 49332
+  },
+  {
+   "hex": "c0b5",
+   "name": "TLS_SHA384_SHA384",
+   "value": 49333
+  },
+  {
+   "hex": "c100",
+   "name": "TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC",
+   "value": 49408
+  },
+  {
+   "hex": "c101",
+   "name": "TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC",
+   "value": 49409
+  },
+  {
+   "hex": "c102",
+   "name": "TLS_GOSTR341112_256_WITH_28147_CNT_IMIT",
+   "value": 49410
+  },
+  {
+   "hex": "c103",
+   "name": "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L",
+   "value": 49411
+  },
+  {
+   "hex": "c104",
+   "name": "TLS_GOSTR341112_256_WITH_MAGMA_MGM_L",
+   "value": 49412
+  },
+  {
+   "hex": "c105",
+   "name": "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S",
+   "value": 49413
+  },
+  {
+   "hex": "c106",
+   "name": "TLS_GOSTR341112_256_WITH_MAGMA_MGM_S",
+   "value": 49414
+  },
+  {
+   "hex": "cca8",
+   "name": "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52392
+  },
+  {
+   "hex": "cca9",
+   "name": "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52393
+  },
+  {
+   "hex": "ccaa",
+   "name": "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52394
+  },
+  {
+   "hex": "ccab",
+   "name": "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52395
+  },
+  {
+   "hex": "ccac",
+   "name": "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52396
+  },
+  {
+   "hex": "ccad",
+   "name": "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52397
+  },
+  {
+   "hex": "ccae",
+   "name": "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256",
+   "value": 52398
+  },
+  {
+   "hex": "d001",
+   "name": "TLS_ECDHE_PSK_WITH_AES_128_GCM_SHA256",
+   "value": 53249
+  },
+  {
+   "hex": "d002",
+   "name": "TLS_ECDHE_PSK_WITH_AES_256_GCM_SHA384",
+   "value": 53250
+  },
+  {
+   "hex": "d003",
+   "name": "TLS_ECDHE_PSK_WITH_AES_128_CCM_8_SHA256",
+   "value": 53251
+  },
+  {
+   "hex": "d005",
+   "name": "TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256",
+   "value": 53253
+  }
+ ],
+ "source": "https://www.iana.org/assignments/tls-parameters/tls-parameters-4.csv"
+}

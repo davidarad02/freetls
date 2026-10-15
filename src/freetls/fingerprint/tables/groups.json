@@ -1,0 +1,301 @@
+{
+ "count": 59,
+ "entries": [
+  {
+   "hex": "0001",
+   "name": "sect163k1",
+   "value": 1
+  },
+  {
+   "hex": "0002",
+   "name": "sect163r1",
+   "value": 2
+  },
+  {
+   "hex": "0003",
+   "name": "sect163r2",
+   "value": 3
+  },
+  {
+   "hex": "0004",
+   "name": "sect193r1",
+   "value": 4
+  },
+  {
+   "hex": "0005",
+   "name": "sect193r2",
+   "value": 5
+  },
+  {
+   "hex": "0006",
+   "name": "sect233k1",
+   "value": 6
+  },
+  {
+   "hex": "0007",
+   "name": "sect233r1",
+   "value": 7
+  },
+  {
+   "hex": "0008",
+   "name": "sect239k1",
+   "value": 8
+  },
+  {
+   "hex": "0009",
+   "name": "sect283k1",
+   "value": 9
+  },
+  {
+   "hex": "000a",
+   "name": "sect283r1",
+   "value": 10
+  },
+  {
+   "hex": "000b",
+   "name": "sect409k1",
+   "value": 11
+  },
+  {
+   "hex": "000c",
+   "name": "sect409r1",
+   "value": 12
+  },
+  {
+   "hex": "000d",
+   "name": "sect571k1",
+   "value": 13
+  },
+  {
+   "hex": "000e",
+   "name": "sect571r1",
+   "value": 14
+  },
+  {
+   "hex": "000f",
+   "name": "secp160k1",
+   "value": 15
+  },
+  {
+   "hex": "0010",
+   "name": "secp160r1",
+   "value": 16
+  },
+  {
+   "hex": "0011",
+   "name": "secp160r2",
+   "value": 17
+  },
+  {
+   "hex": "0012",
+   "name": "secp192k1",
+   "value": 18
+  },
+  {
+   "hex": "0013",
+   "name": "secp192r1",
+   "value": 19
+  },
+  {
+   "hex": "0014",
+   "name": "secp224k1",
+   "value": 20
+  },
+  {
+   "hex": "0015",
+   "name": "secp224r1",
+   "value": 21
+  },
+  {
+   "hex": "0016",
+   "name": "secp256k1",
+   "value": 22
+  },
+  {
+   "hex": "0017",
+   "name": "secp256r1",
+   "value": 23
+  },
+  {
+   "hex": "0018",
+   "name": "secp384r1",
+   "value": 24
+  },
+  {
+   "hex": "0019",
+   "name": "secp521r1",
+   "value": 25
+  },
+  {
+   "hex": "001a",
+   "name": "brainpoolP256r1",
+   "value": 26
+  },
+  {
+   "hex": "001b",
+   "name": "brainpoolP384r1",
+   "value": 27
+  },
+  {
+   "hex": "001c",
+   "name": "brainpoolP512r1",
+   "value": 28
+  },
+  {
+   "hex": "001d",
+   "name": "x25519",
+   "value": 29
+  },
+  {
+   "hex": "001e",
+   "name": "x448",
+   "value": 30
+  },
+  {
+   "hex": "001f",
+   "name": "brainpoolP256r1tls13",
+   "value": 31
+  },
+  {
+   "hex": "0020",
+   "name": "brainpoolP384r1tls13",
+   "value": 32
+  },
+  {
+   "hex": "0021",
+   "name": "brainpoolP512r1tls13",
+   "value": 33
+  },
+  {
+   "hex": "0022",
+   "name": "GC256A",
+   "value": 34
+  },
+  {
+   "hex": "0023",
+   "name": "GC256B",
+   "value": 35
+  },
+  {
+   "hex": "0024",
+   "name": "GC256C",
+   "value": 36
+  },
+  {
+   "hex": "0025",
+   "name": "GC256D",
+   "value": 37
+  },
+  {
+   "hex": "0026",
+   "name": "GC512A",
+   "value": 38
+  },
+  {
+   "hex": "0027",
+   "name": "GC512B",
+   "value": 39
+  },
+  {
+   "hex": "0028",
+   "name": "GC512C",
+   "value": 40
+  },
+  {
+   "hex": "0029",
+   "name": "curveSM2",
+   "value": 41
+  },
+  {
+   "hex": "0100",
+   "name": "ffdhe2048",
+   "value": 256
+  },
+  {
+   "hex": "0101",
+   "name": "ffdhe3072",
+   "value": 257
+  },
+  {
+   "hex": "0102",
+   "name": "ffdhe4096",
+   "value": 258
+  },
+  {
+   "hex": "0103",
+   "name": "ffdhe6144",
+   "value": 259
+  },
+  {
+   "hex": "0104",
+   "name": "ffdhe8192",
+   "value": 260
+  },
+  {
+   "hex": "0200",
+   "name": "MLKEM512",
+   "value": 512
+  },
+  {
+   "hex": "0201",
+   "name": "MLKEM768",
+   "value": 513
+  },
+  {
+   "hex": "0202",
+   "name": "MLKEM1024",
+   "value": 514
+  },
+  {
+   "hex": "11e9",
+   "name": "SecP256r1MLKEM512",
+   "value": 4585
+  },
+  {
+   "hex": "11ea",
+   "name": "MLKEM512X25519",
+   "value": 4586
+  },
+  {
+   "hex": "11eb",
+   "name": "SecP256r1MLKEM768",
+   "value": 4587
+  },
+  {
+   "hex": "11ec",
+   "name": "X25519MLKEM768",
+   "value": 4588
+  },
+  {
+   "hex": "11ed",
+   "name": "SecP384r1MLKEM1024",
+   "value": 4589
+  },
+  {
+   "hex": "11ee",
+   "name": "curveSM2MLKEM768",
+   "value": 4590
+  },
+  {
+   "hex": "6399",
+   "name": "X25519Kyber768Draft00 (OBSOLETE)",
+   "value": 25497
+  },
+  {
+   "hex": "639a",
+   "name": "SecP256r1Kyber768Draft00 (OBSOLETE)",
+   "value": 25498
+  },
+  {
+   "hex": "ff01",
+   "name": "arbitrary_explicit_prime_curves",
+   "value": 65281
+  },
+  {
+   "hex": "ff02",
+   "name": "arbitrary_explicit_char2_curves",
+   "value": 65282
+  }
+ ],
+ "source": "https://www.iana.org/assignments/tls-parameters/tls-parameters-8.csv"
+}

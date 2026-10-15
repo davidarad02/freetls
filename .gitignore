@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+dist_sdist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Native build artifacts (produced by `make native`, `pip install`, or the
+# loader's auto-build). Never commit these.
+native/libfreetls.so
+native/libfreetls.dylib
+native/libfreetls.h
+native/freetls.dll
+native/freetls.h
+src/freetls/_lib/*.so
+src/freetls/_lib/*.dylib
+src/freetls/_lib/*.dll
+src/freetls/_lib/*.h
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
