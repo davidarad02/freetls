@@ -157,6 +157,11 @@ class FingerprintSpec:
     # None = leave the preset's ALPN untouched; [] = remove ALPN; list = set it.
     preset_alpn: Optional[list] = None
 
+    # A uTLS ClientHelloSpec JSON document (see README "Custom presets"). When
+    # set it fully describes the ClientHello and takes precedence over
+    # ``preset`` and ``ciphers``/``extensions``.
+    chlo_json: Optional[str] = None
+
     # HTTP/2 fingerprint controls (applied by TLSSession.h2_request / the
     # HTTP/2 transport). ``h2_settings`` is an ordered list of [id, value].
     h2_settings: Optional[list] = None
@@ -182,6 +187,8 @@ class FingerprintSpec:
                     out["preset_alpn_remove"] = True
                 else:
                     out["preset_alpn"] = list(self.preset_alpn)
+        if self.chlo_json is not None:
+            out["chlo_json"] = self.chlo_json
         return out
 
     def find(self, kind: str) -> Optional[Extension]:
@@ -210,6 +217,7 @@ class FingerprintSpec:
             preset=self.preset,
             preset_no_sni=self.preset_no_sni,
             preset_alpn=None if self.preset_alpn is None else list(self.preset_alpn),
+            chlo_json=self.chlo_json,
             h2_settings=None if self.h2_settings is None else [list(s) for s in self.h2_settings],
             h2_window_update=self.h2_window_update,
             h2_pseudo_header_order=(

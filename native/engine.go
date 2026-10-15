@@ -53,6 +53,10 @@ type specJSON struct {
 	PresetALPN       []string `json:"preset_alpn,omitempty"`
 	PresetALPNRemove bool     `json:"preset_alpn_remove,omitempty"`
 
+	// ChloJSON is a uTLS ClientHelloSpec JSON document. When set it takes
+	// precedence over Preset and the explicit Extensions list.
+	ChloJSON string `json:"chlo_json,omitempty"`
+
 	Ciphers     []uint16  `json:"ciphers"`
 	Compression []uint8   `json:"compression,omitempty"`
 	Extensions  []extJSON `json:"extensions,omitempty"`
@@ -67,66 +71,8 @@ type specJSON struct {
 	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
 
-// presetByName maps uTLS preset names to their ClientHelloIDs. This is the
-// authoritative catalogue of real client fingerprints shipped by uTLS.
-//
-// The "_Auto" entries always track uTLS's notion of the latest version.
-var presetByName = map[string]utls.ClientHelloID{
-	// Firefox
-	"HelloFirefox_55":   utls.HelloFirefox_55,
-	"HelloFirefox_56":   utls.HelloFirefox_56,
-	"HelloFirefox_63":   utls.HelloFirefox_63,
-	"HelloFirefox_65":   utls.HelloFirefox_65,
-	"HelloFirefox_99":   utls.HelloFirefox_99,
-	"HelloFirefox_102":  utls.HelloFirefox_102,
-	"HelloFirefox_105":  utls.HelloFirefox_105,
-	"HelloFirefox_120":  utls.HelloFirefox_120,
-	"HelloFirefox_148":  utls.HelloFirefox_148,
-	"HelloFirefox_Auto": utls.HelloFirefox_Auto,
-	// Chrome
-	"HelloChrome_58":          utls.HelloChrome_58,
-	"HelloChrome_62":          utls.HelloChrome_62,
-	"HelloChrome_70":          utls.HelloChrome_70,
-	"HelloChrome_72":          utls.HelloChrome_72,
-	"HelloChrome_83":          utls.HelloChrome_83,
-	"HelloChrome_87":          utls.HelloChrome_87,
-	"HelloChrome_96":          utls.HelloChrome_96,
-	"HelloChrome_100":         utls.HelloChrome_100,
-	"HelloChrome_102":         utls.HelloChrome_102,
-	"HelloChrome_106_Shuffle": utls.HelloChrome_106_Shuffle,
-	"HelloChrome_115_PQ":      utls.HelloChrome_115_PQ,
-	"HelloChrome_120":         utls.HelloChrome_120,
-	"HelloChrome_120_PQ":      utls.HelloChrome_120_PQ,
-	"HelloChrome_131":         utls.HelloChrome_131,
-	"HelloChrome_133":         utls.HelloChrome_133,
-	"HelloChrome_155":         utls.HelloChrome_155,
-	"HelloChrome_Auto":        utls.HelloChrome_Auto,
-	// iOS / Android
-	"HelloIOS_11_1":          utls.HelloIOS_11_1,
-	"HelloIOS_12_1":          utls.HelloIOS_12_1,
-	"HelloIOS_13":            utls.HelloIOS_13,
-	"HelloIOS_14":            utls.HelloIOS_14,
-	"HelloIOS_Auto":          utls.HelloIOS_Auto,
-	"HelloAndroid_11_OkHttp": utls.HelloAndroid_11_OkHttp,
-	// Edge
-	"HelloEdge_85":   utls.HelloEdge_85,
-	"HelloEdge_106":  utls.HelloEdge_106,
-	"HelloEdge_Auto": utls.HelloEdge_Auto,
-	// Safari
-	"HelloSafari_16_0": utls.HelloSafari_16_0,
-	"HelloSafari_26_3": utls.HelloSafari_26_3,
-	"HelloSafari_Auto": utls.HelloSafari_Auto,
-	// Others
-	"Hello360_7_5":          utls.Hello360_7_5,
-	"Hello360_11_0":         utls.Hello360_11_0,
-	"Hello360_Auto":         utls.Hello360_Auto,
-	"HelloQQ_11_1":          utls.HelloQQ_11_1,
-	"HelloQQ_Auto":          utls.HelloQQ_Auto,
-	"HelloGolang":           utls.HelloGolang,
-	"HelloRandomized":       utls.HelloRandomized,
-	"HelloRandomizedALPN":   utls.HelloRandomizedALPN,
-	"HelloRandomizedNoALPN": utls.HelloRandomizedNoALPN,
-}
+// presetByName is generated from the pinned uTLS version by
+// tools/gen_presets.py (see native/preset_map_gen.go). Do not edit by hand.
 
 // ---------------------------------------------------------------------------
 // tee-ing net.Conn: records handshake bytes for JA4/JA4S self-verification
@@ -207,9 +153,10 @@ type session struct {
 	config  *utls.Config
 	tee     *teeConn
 	uconn   *utls.UConn
-	raw     net.Conn
-	preset  string
-	noSNI   bool
+	raw      net.Conn
+	preset   string
+	chloJSON string
+	noSNI    bool
 	alpn    []string
 	alpnSet bool
 	alpnDel bool
@@ -429,6 +376,66 @@ func freetls_preset_raw(name *C.char) *C.char {
 	return hexOf(uconn.HandshakeState.Hello.Raw)
 }
 
+// parseChloJSON parses a uTLS ClientHelloSpec JSON document.
+func parseChloJSON(js string) (*utls.ClientHelloSpec, error) {
+	var chs utls.ClientHelloSpec
+	if err := json.Unmarshal([]byte(js), &chs); err != nil {
+		return nil, err
+	}
+	return &chs, nil
+}
+
+// safeParseChloJSON parses JSON but converts the uTLS parser's panics (it can
+// nil-deref on a document missing required fields) into an error.
+func safeParseChloJSON(js string) (chs *utls.ClientHelloSpec, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			chs, err = nil, fmt.Errorf("invalid ClientHelloSpec JSON: %v", r)
+		}
+	}()
+	return parseChloJSON(js)
+}
+
+// freetls_chlo_raw builds a ClientHello offline from a uTLS ClientHelloSpec
+// JSON document and returns the raw handshake message as hex (empty on error).
+// No network is used.
+//
+//export freetls_chlo_raw
+func freetls_chlo_raw(chloJSON *C.char) (out *C.char) {
+	auxErr = ""
+	defer func() {
+		if r := recover(); r != nil {
+			auxErr = fmt.Sprintf("invalid ClientHelloSpec JSON: %v", r)
+			out = C.CString("")
+		}
+	}()
+	chs, err := safeParseChloJSON(C.GoString(chloJSON))
+	if err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	uconn := utls.UClient(dummyConn{}, &utls.Config{ServerName: "example.com"}, utls.HelloCustom)
+	if err := uconn.ApplyPreset(chs); err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	if err := uconn.MarshalClientHello(); err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	return hexOf(uconn.HandshakeState.Hello.Raw)
+}
+
+// auxErr holds the reason the last offline build (chlo_json) failed.
+var auxErr string
+
+// freetls_aux_error returns the last offline-build error (empty if none).
+//
+//export freetls_aux_error
+func freetls_aux_error() *C.char {
+	return C.CString(auxErr)
+}
+
 // freetls_preset_list returns a JSON array of known preset names.
 //
 //export freetls_preset_list
@@ -517,7 +524,7 @@ func freetls_session_new(specJSON *C.char) C.longlong {
 	if err != nil {
 		return 0
 	}
-	sess := &session{spec: chs, config: cfg, preset: s.Preset,
+	sess := &session{spec: chs, config: cfg, preset: s.Preset, chloJSON: s.ChloJSON,
 		noSNI: s.PresetNoSNI, alpn: s.PresetALPN,
 		alpnSet: s.PresetALPN != nil, alpnDel: s.PresetALPNRemove}
 	if s.TimeoutMS > 0 {
@@ -545,7 +552,15 @@ func freetls_session_free(h C.longlong) {
 // Returns 0 on success, negative on failure.
 //
 //export freetls_handshake
-func freetls_handshake(h C.longlong, fd C.int, sni *C.char) C.int {
+func freetls_handshake(h C.longlong, fd C.int, sni *C.char) (rc C.int) {
+	defer func() {
+		if r := recover(); r != nil {
+			if s := getSession(int64(h)); s != nil {
+				cErr(s, fmt.Errorf("panic: %v", r))
+			}
+			rc = -99
+		}
+	}()
 	s := getSession(int64(h))
 	if s == nil {
 		return -1
@@ -570,7 +585,17 @@ func freetls_handshake(h C.longlong, fd C.int, sni *C.char) C.int {
 	s.tee = tee
 
 	uconn := utls.UClient(tee, s.config, utls.HelloCustom)
-	if s.preset != "" {
+	if s.chloJSON != "" {
+		chs, err := safeParseChloJSON(s.chloJSON)
+		if err != nil {
+			cErr(s, fmt.Errorf("chlo_json: %w", err))
+			return -9
+		}
+		if err := uconn.ApplyPreset(chs); err != nil {
+			cErr(s, fmt.Errorf("ApplyPreset(chlo_json): %w", err))
+			return -4
+		}
+	} else if s.preset != "" {
 		id, ok := presetByName[s.preset]
 		if !ok {
 			cErr(s, fmt.Errorf("unknown preset %q", s.preset))

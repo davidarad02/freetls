@@ -79,3 +79,28 @@ def build_server_hello(
     body += b"\x00"  # compression method
     body += _u16(len(exts_b)) + exts_b
     return b"\x02" + _u24(len(body)) + bytes(body)
+
+
+# A minimal, valid uTLS ClientHelloSpec JSON document (TLS 1.3).
+CHLO_JSON = """{
+  "cipher_suites": ["TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384",
+                    "TLS_CHACHA20_POLY1305_SHA256",
+                    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"],
+  "compression_methods": ["NULL"],
+  "extensions": [
+    {"name": "server_name"},
+    {"name": "extended_master_secret"},
+    {"name": "supported_versions", "versions": ["TLS 1.3", "TLS 1.2"]},
+    {"name": "supported_groups", "named_group_list": ["x25519", "secp256r1"]},
+    {"name": "ec_point_formats", "ec_point_format_list": ["uncompressed"]},
+    {"name": "signature_algorithms",
+     "supported_signature_algorithms": ["ecdsa_secp256r1_sha256",
+                                        "rsa_pss_rsae_sha256", "rsa_pkcs1_sha256"]},
+    {"name": "key_share", "client_shares": [{"group": "x25519"}]},
+    {"name": "psk_key_exchange_modes", "ke_modes": ["psk_dhe_ke"]},
+    {"name": "application_layer_protocol_negotiation",
+     "protocol_name_list": ["h2", "http/1.1"]}
+  ],
+  "min_vers": 771,
+  "max_vers": 772
+}"""

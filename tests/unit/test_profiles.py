@@ -40,9 +40,10 @@ def test_every_profile_reproduces_its_ja4():
     engine_lib = engine  # ensure loaded
     checked = 0
     for prof in profiles.list_profiles():
-        raw = engine.preset_raw_opts(
-            prof.preset, no_sni=prof.no_sni, alpn=prof.alpn
-        )
+        if prof.chlo_json is not None:
+            raw = engine.chlo_raw(prof.chlo_json)
+        else:
+            raw = engine.preset_raw_opts(prof.preset, no_sni=prof.no_sni, alpn=prof.alpn)
         assert raw, f"empty ClientHello for {prof.alias}"
         got = ja4_from_bytes(raw)["ja4"]
         assert got == prof.ja4, f"{prof.alias}: {got} != {prof.ja4}"

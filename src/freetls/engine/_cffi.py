@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-from ..errors import EngineError, HandshakeError
+from ..errors import EngineError, HandshakeError, SpecError
 
 _CDEF = """
 char *freetls_version(void);
@@ -31,6 +31,8 @@ char *freetls_get_state(long long);
 char *freetls_last_error(long long);
 char *freetls_preset_raw(const char *);
 char *freetls_preset_raw_opts(const char *, int, const char *);
+char *freetls_chlo_raw(const char *);
+char *freetls_aux_error(void);
 char *freetls_preset_list(void);
 char *freetls_h2_request(long long, const char *);
 """
@@ -201,6 +203,20 @@ def preset_raw_opts(name: str, no_sni: bool = False, alpn=None) -> bytes:
         lib.freetls_preset_raw_opts(name.encode(), 1 if no_sni else 0, alpn_json)
     ).decode()
     return bytes.fromhex(s) if s else b""
+
+
+def chlo_raw(chlo_json: str) -> bytes:
+    """Build a ClientHello offline from a uTLS ClientHelloSpec JSON document.
+
+    Returns the raw handshake message bytes, or ``b""`` if the document is
+    invalid/unsupported. No network is used.
+    """
+    ffi, lib = _load()
+    s = ffi.string(lib.freetls_chlo_raw(chlo_json.encode())).decode()
+    if not s:
+        reason = ffi.string(lib.freetls_aux_error()).decode() or "invalid ClientHelloSpec JSON"
+        raise SpecError(f"chlo_json: {reason}")
+    return bytes.fromhex(s)
 
 
 @dataclass

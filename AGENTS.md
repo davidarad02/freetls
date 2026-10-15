@@ -62,7 +62,10 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
    `$HOME` — `make setup-caps` installs `~/.local/freetls-deps/bin/tcpdump`.
    Without it, `-m pcap` tests **skip** (not fail); they run by default.
 4. **Regeneration.** IANA tables (`src/freetls/fingerprint/tables/*.json`) come
-   from `tools/gen_tables.py`; the profile catalog
+   from `tools/gen_tables.py`; the Go preset map
+   (`native/preset_map_gen.go`, **generated — do not edit by hand**) from
+   `tools/gen_presets.py`, which parses the uTLS version pinned in
+   `native/go.mod` and drops presets uTLS cannot build; the profile catalog
    (`src/freetls/profiles/catalog.json`) from `tools/gen_catalog.py`. Run
    `make gen` after touching the universe, presets, or parser/engine output;
    `tool/gen_catalog.py` deliberately **excludes nondeterministic presets**
@@ -84,9 +87,14 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - `native/engine.go` — TLS engine: JSON spec → uTLS `ClientHelloSpec`,
   `GenericExtension` padding, baseline injection, tee'd ClientHello/ServerHello,
   peer cert, read deadlines. C ABI consumed by cffi.
+- `native/preset_map_gen.go` — **generated** name→`ClientHelloID` map for the
+  pinned uTLS (see `tools/gen_presets.py`). The engine also accepts a full uTLS
+  `ClientHelloSpec` JSON via the spec's `chlo_json` field (or `profiles.add_profile`),
+  so arbitrary/newer fingerprints need no Go change.
 - `native/httpx_h2.go` — Go-side HTTP/2 client (`x/net/http2` Framer + hpack)
   exposing configurable SETTINGS/WINDOW_UPDATE/pseudo-header order.
-- `native/h2_test.go` — asserts the exact H2 frames on the wire.
+- `native/h2_test.go` / `native/presets_test.go` — assert the exact H2 frames on
+  the wire and that every generated preset is buildable.
 - `src/freetls/engine/_cffi.py` — cffi binding + `.so` discovery (`FREETLS_LIB`,
   then `src/freetls/_lib`, then `native/`, then `build/`).
 - `src/freetls/model.py` — `FingerprintSpec` / `Extension` (the spec model).
@@ -98,14 +106,15 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   `wrap_socket`).
 - `src/freetls/fingerprint/` — `ja4.py` (also `ja4_from_spec`), `ja3.py`,
   `ja4s.py`, `parse.py` (raw hello parser), `tables/`.
-- `src/freetls/profiles/` — catalog loader (`get`/`list_profiles`/`spec`).
+- `src/freetls/profiles/` — catalog loader + **runtime registration**
+  (`get`/`list_profiles`/`spec`/`add_profile`/`load_file`).
 - `src/freetls/transport/` — `requests_adapter.py` (+ `urllib3_conn.py`),
   `httpx_transport.py`, `aiohttp_connector.py`.
 - `src/freetls/verify.py` — self-verification + optional `cryptography` cert
   parity hook.
 - `tests/` — `unit/`, `conformance/` (FoxIO vectors), `e2e/`, `pcap/`;
-  `tests/_build.py` (raw-hello builders), `tests/servers.py` (in-process HTTPS
-  app server), `tests/servers/go_https/` (Go h2 test server).
+  `tests/_build.py` (raw-hello builders + `CHLO_JSON`), `tests/servers.py`
+  (in-process HTTPS app server), `tests/servers/go_https/` (Go h2 test server).
 
 ## Wiring facts that span files
 
@@ -113,6 +122,11 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   field means editing: `model.py::FingerprintSpec.to_engine`,
   `native/engine.go::specJSON`, and the `buildExtension` switch (or `doH2` for
   H2 fields). Keep them in sync.
+- uTLS's JSON parser can **panic** on a malformed `ClientHelloSpec` document;
+  the engine wraps parsing/`ApplyPreset` in `recover()` (see `safeParseChloJSON`)
+  so a bad `chlo_json` returns an error instead of crashing the host process.
+- Precedence in the engine handshake: `chlo_json` > `preset` > explicit
+  `ciphers`/`extensions`.
 - Fingerprints are always computed **from the bytes the engine emitted/received**
   (`session.fingerprints` / `verify.fingerprints`), never from the spec, except
   `ja4_from_spec` (offline, for range tests) which must agree with the engine

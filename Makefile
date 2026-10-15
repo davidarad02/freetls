@@ -18,7 +18,7 @@ help:
 	@echo "  make test        full suite (unit + conformance + e2e + pcap)"
 	@echo "  make test-fast   same, minus privileged pcap capture"
 	@echo "  make coverage    run the suite and enforce the 85% coverage gate"
-	@echo "  make gen         regenerate IANA tables + profile catalog"
+	@echo "  make gen         regenerate IANA tables + preset map + profile catalog"
 	@echo "  make setup-caps  one-time: install a cap_net_raw tcpdump under ~/.local"
 	@echo "  make build       build sdist + wheel into dist/"
 	@echo "  make clean       remove build artifacts"
@@ -44,6 +44,7 @@ coverage: native
 
 gen: native
 	$(PY) tools/gen_tables.py
+	$(PY) tools/gen_presets.py
 	$(PY) tools/gen_catalog.py
 
 setup-caps:

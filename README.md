@@ -37,6 +37,7 @@ third-party fingerprint services.
 - [Choosing a fingerprint](#choosing-a-fingerprint)
   - [Modes](#modes)
   - [Profiles catalog](#profiles-catalog)
+  - [Custom & registered profiles](#custom--registered-profiles)
   - [The spec model](#the-spec-model)
 - [HTTP/2](#http2)
 - [Certificate verification](#certificate-verification)
@@ -279,7 +280,59 @@ Each profile's stored `ja4` is produced by the engine and verified by tests.
 Profiles are built from uTLS presets plus realistic variants (HTTP/1.1-only,
 no ALPN, no SNI). Presets whose JA4 is nondeterministic (extension shufflers
 with GREASE-dependent padding) are excluded automatically, so a missing alias is
-expected.
+expected. For presets whose JA4 is stable but JA3 is not (extension shufflers),
+`ja3` is left blank.
+
+The catalog is generated from the uTLS version pinned in `native/go.mod`:
+`tools/gen_presets.py` derives the preset list (and drops presets uTLS cannot
+build), and `tools/gen_catalog.py` enumerates the profiles. Run `make gen` after
+bumping uTLS. The `_Auto` aliases (`chrome_auto`, `firefox_auto`,
+`safari_auto`, …) always track uTLS's latest version.
+
+### Custom & registered profiles
+
+You are not limited to the shipped catalog. Register your own profiles at
+runtime — from a uTLS preset name or from a full **ClientHelloSpec JSON**
+document — with no code changes:
+
+```python
+from freetls import profiles
+
+# From a uTLS preset name:
+profiles.add_profile("my_chrome", preset="HelloChrome_155")
+
+# From a ClientHelloSpec JSON document (uTLS schema; names come from uTLS's
+# dictionaries, e.g. cipher suites "TLS_AES_128_GCM_SHA256", groups "x25519",
+# extensions "supported_versions"/"key_share"/...):
+profiles.add_profile(
+    "my_custom",
+    chlo_json='{"cipher_suites": ["TLS_AES_128_GCM_SHA256"], '
+              '"compression_methods": ["NULL"], '
+              '"extensions": [{"name": "server_name"}, '
+              '{"name": "supported_versions", "versions": ["TLS 1.3"]}, '
+              '{"name": "key_share", "client_shares": [{"group": "x25519"}]}], '
+              '"min_vers": 772, "max_vers": 772}',
+)
+
+profiles.get("my_custom").spec(server_name="example.com")   # used like any profile
+profiles.names()                                            # includes "my_custom"
+
+# Or load a batch from a JSON file (a list, or {"profiles": [...]}):
+profiles.load_file("extra_profiles.json")
+```
+
+`ja4`/`ja3` are computed from the engine automatically; a malformed JSON
+document or unknown name raises a clear error (never crashes). A raw spec can
+also be used directly without registering it:
+
+```python
+from freetls import FingerprintSpec
+spec = FingerprintSpec(chlo_json=chlo_json, server_name="example.com")
+```
+
+This is the escape hatch for the newest browser versions or any custom client:
+scan for a ClientHello, convert it to the uTLS JSON schema, register it, and
+`freetls` will drive a real handshake with that fingerprint.
 
 ### The spec model
 
@@ -316,8 +369,9 @@ spec = FingerprintSpec(
 server-ignored extension IDs (the basis of JA4_c range).
 
 Specs also carry H2 fields (`h2_settings`, `h2_window_update`,
-`h2_pseudo_header_order`) and profile fields (`preset`, `preset_no_sni`,
-`preset_alpn`).
+`h2_pseudo_header_order`), preset fields (`preset`, `preset_no_sni`,
+`preset_alpn`), and `chlo_json` (a full ClientHelloSpec JSON document — see
+[Custom & registered profiles](#custom--registered-profiles)).
 
 ---
 
@@ -451,10 +505,23 @@ true_random(server_name=None, alpn=..., vers_min=..., vers_max=...,
 
 ```python
 profiles.names() -> list[str]
-profiles.list_profiles() -> list[Profile]
+profiles.list_profiles() -> list[Profile]      # built-in + registered
 profiles.get(name_or_alias) -> Profile | None
 profiles.spec(name_or_alias, server_name=None, verify=False) -> FingerprintSpec
-profiles.catalog_info() -> {"count", "distinct_ja4", "generated_by", "engine_version"}
+profiles.catalog_info() -> {"count", "distinct_ja4", "registered", "total", ...}
+profiles.add_profile(name, *, alias=None, preset=None, chlo_json=None,
+                     no_sni=False, alpn=None, ja4=None, ja3=None) -> Profile
+profiles.load_file(path) -> int                # register a JSON list of profiles
+```
+
+### Engine helpers — `freetls.engine`
+
+```python
+engine.version() -> str
+engine.preset_list() -> list[str]              # uTLS preset names (generated)
+engine.preset_raw(name) -> bytes               # offline ClientHello for a preset
+engine.preset_raw_opts(name, no_sni=False, alpn=None) -> bytes
+engine.chlo_raw(chlo_json) -> bytes            # offline ClientHello for a JSON spec
 ```
 
 ### `verify`
@@ -566,7 +633,7 @@ make native      # build native/libfreetls.so (the c-shared engine)
 make test        # full suite (unit + conformance + e2e + pcap)
 make test-fast   # skip privileged pcap capture
 make coverage    # enforce the 85% coverage gate
-make gen         # regenerate IANA tables + profile catalog
+make gen         # regenerate IANA tables + preset map + profile catalog
 make setup-caps  # one-time: make a local tcpdump capable of loopback capture
 make build       # build sdist + wheel into dist/
 cd native && go test ./...   # Go HTTP/2 wire test

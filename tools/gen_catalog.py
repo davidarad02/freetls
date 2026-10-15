@@ -8,6 +8,10 @@ variants that real clients exhibit: HTTP/1.1-only ALPN, no ALPN, and no SNI
 preset builder, and its JA4/JA3 are computed and stored for verification.
 
 Network is never used.
+
+Profiles are emitted only when their JA4 is stable across repeated builds;
+JA3 (which is order-sensitive) is recorded only when it is stable too, and is
+left blank for extension-shuffling presets.
 """
 from __future__ import annotations
 
@@ -47,20 +51,23 @@ def main() -> int:
     seen = set()
     for preset in presets:
         for suffix, no_sni, alpn in VARIANTS:
-            raw = engine.preset_raw_opts(preset, no_sni=no_sni, alpn=alpn)
-            if not raw:
-                continue
-            j4 = ja4_from_bytes(raw)
-            if not j4["ja4"]:
-                continue
-            # Only include profiles whose JA4 is stable across several builds.
-            if any(
-                ja4_from_bytes(engine.preset_raw_opts(preset, no_sni=no_sni, alpn=alpn))["ja4"]
-                != j4["ja4"]
+            # Build the variant several times: only include it when the JA4 is
+            # stable (extension shufflers with GREASE-dependent padding vary).
+            raws = [
+                engine.preset_raw_opts(preset, no_sni=no_sni, alpn=alpn)
                 for _ in range(25)
-            ):
+            ]
+            raws = [r for r in raws if r]
+            if not raws:
                 continue
-            j3 = ja3_from_bytes(raw)
+            ja4_values = {ja4_from_bytes(r)["ja4"] for r in raws}
+            if len(ja4_values) != 1 or not next(iter(ja4_values)):
+                continue
+            j4 = ja4_from_bytes(raws[0])
+            # JA3 is order-sensitive, so it is unstable for shufflers; record it
+            # only when every build agrees, otherwise leave it blank.
+            ja3_values = {ja3_from_bytes(r)["ja3"] for r in raws}
+            j3 = {"ja3": next(iter(ja3_values)) if len(ja3_values) == 1 else ""}
             name = preset + suffix
             alias = alias_for(preset, suffix)
             key = (alias, j4["ja4"])

@@ -7,6 +7,7 @@ handle wrapper.
 from ._cffi import (
     EngineSession,
     EngineState,
+    chlo_raw,
     preset_list,
     preset_raw,
     preset_raw_opts,
@@ -20,4 +21,5 @@ __all__ = [
     "preset_list",
     "preset_raw",
     "preset_raw_opts",
+    "chlo_raw",
 ]
