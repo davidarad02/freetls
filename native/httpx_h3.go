@@ -269,6 +269,8 @@ func freetls_h3_datagram_open(h C.longlong, reqJSON *C.char) (out *C.char) {
 		return C.CString(string(b))
 	}
 	if err := str.SendRequestHeader(hreq); err != nil {
+		str.CancelWrite(quic.StreamErrorCode(0))
+		str.CancelRead(quic.StreamErrorCode(0))
 		b, _ := json.Marshal(map[string]any{"error": err.Error()})
 		return C.CString(string(b))
 	}

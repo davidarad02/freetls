@@ -53,9 +53,11 @@ edits upstream files; `tools/rebase_utls.sh` re-applies it after each re-copy:
   `Config.Anonymous`.
 - `common.go`: add `Config.Anonymous`, `Config.PskIdentity`, `Config.Psk`,
   `Config.SrpUsername` and `Config.SrpPassword`.
-- `u_quic.go`: one call in `UQUICConn.HandleData` recording the Initial-level
-  handshake bytes (the ServerHello), so the engine can report JA4Sq for QUIC —
-  there is no TLS record stream to tee.
+- `u_quic.go`: a `freetlsSH []byte` field on `UQUICConn`, plus one call in
+  `UQUICConn.HandleData` recording the Initial-level handshake bytes (the
+  ServerHello), so the engine can report JA4Sq for QUIC — there is no TLS record
+  stream to tee. The bytes live on the connection (not a global map), so they are
+  released with it.
 
 ## Registration rules (do not break these)
 

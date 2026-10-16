@@ -190,6 +190,10 @@
  			c.sendAlert(alertIllegalParameter)
 --- a/u_quic.go
 +++ b/u_quic.go
+@@ -20,2 +20,3 @@
+ 	sessionTicketSent bool
++	freetlsSH []byte // [freetls] ServerHello captured for JA4Sq
+ }
 @@ -99,6 +99,7 @@
  // HandleData handles handshake bytes received from the peer.
  // It may produce connection events, which may be read with NextEvent.

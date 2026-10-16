@@ -6,6 +6,8 @@ the client is exercised against an independent QUIC/TLS implementation.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from freetls import QUICSession, engine
@@ -91,6 +93,43 @@ def test_quic_client_hello_matches_offline_build(h3_server):
         assert ja4_from_bytes(offline, transport="q")["ja4"] == session.ja4q
     finally:
         session.close()
+
+
+def test_quic_session_resumption(h3_server):
+    """Session resumption works over QUIC via session_cache + pre_shared_key."""
+    from freetls.model import Extension
+
+    spec = _quic_spec()
+    spec.session_cache = 64
+    spec.extensions.append(Extension.pre_shared_key())
+    first = QUICSession(spec)
+    first.connect("127.0.0.1", h3_server.port, server_hostname="localhost", timeout=15)
+    try:
+        assert first.did_resume is False
+        first.request("/")  # let the NewSessionTicket arrive
+        time.sleep(0.3)
+    finally:
+        first.close()
+    second = QUICSession(spec.copy())
+    second.connect("127.0.0.1", h3_server.port, server_hostname="localhost", timeout=15)
+    try:
+        assert second.did_resume is True
+    finally:
+        second.close()
+
+
+def test_quic_ja4sq_survives_close(h3_server):
+    """The ServerHello/JA4Sq are cached at handshake time (like TLSSession), so
+    they remain readable after close()."""
+    session = QUICSession(_quic_spec())
+    session.connect("127.0.0.1", h3_server.port, timeout=15)
+    ja4sq = session.ja4sq
+    sh = session.server_hello()
+    assert ja4sq is not None and ja4sq.startswith("q")
+    assert sh[:1] == b"\x02"
+    session.close()
+    assert session.ja4sq == ja4sq
+    assert session.server_hello() == sh
 
 
 def test_quic_session_is_freed(h3_server):

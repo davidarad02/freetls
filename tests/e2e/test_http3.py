@@ -268,6 +268,24 @@ def test_requests_http3_adapter(h3_server):
     assert resp.status_code == 200
     assert b"hello-h3" in resp.content
     assert adapter.last_ja4 is not None and adapter.last_ja4.startswith("q")
+    assert adapter.last_ja4s is not None and adapter.last_ja4s.startswith("q")
+
+
+def test_quic_wrap_socket_with_host_port(h3_server):
+    """wrap_socket works when the (unconnected) UDP peer is supplied."""
+    import socket as _socket
+
+    spec = _quic_spec()
+    spec.timeout_ms = 15000
+    session = QUICSession(spec)
+    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    try:
+        session.wrap_socket(sock, "localhost", host="127.0.0.1", port=h3_server.port)
+        assert session.selected_alpn_protocol() == "h3"
+        resp = session.request("/")
+        assert resp["status"] == 200
+    finally:
+        session.close()
 
 
 def test_httpx_http3_rejects_proxy(h3_server):

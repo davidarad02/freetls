@@ -242,7 +242,7 @@ def specific(
     vers_max: int = TLS13,
     verify: bool | None = None,
 ) -> FingerprintSpec:
-    """Specific mode: exact control. Missing functional extensions are added."""
+    """Specific mode: exact control. Passing ``extensions`` replaces the set."""
     spec = baseline_spec(
         server_name=server_name,
         ciphers=list(ciphers) if ciphers is not None else DEFAULT_CIPHERS,
@@ -489,7 +489,13 @@ _QUIC_FUNCTIONAL_EXT_IDS = _FUNCTIONAL_EXT_IDS | {0x0039}
 
 
 def default_quic_transport_parameters() -> list[TransportParameter]:
-    """A realistic, browser-like default QUIC transport-parameter set."""
+    """A realistic, browser-like default QUIC transport-parameter set.
+
+    Use this as the base for a custom ``transport_parameters=`` list: uQUIC takes
+    the transport parameters from the spec alone, so a partial list still
+    handshakes but then breaks every HTTP/3 request (the peer cannot open its
+    control/QPACK streams).
+    """
     return [
         TransportParameter.varint("max_idle_timeout", 30000),
         TransportParameter.varint("max_udp_payload_size", 1472),
@@ -573,7 +579,7 @@ def quic_specific(
     datagrams: bool = False,
     verify: bool | None = None,
 ) -> FingerprintSpec:
-    """Specific QUIC mode: exact control. Missing functional extensions are added."""
+    """Specific QUIC mode: exact control. Passing ``extensions`` replaces the set."""
     spec = quic_baseline_spec(
         server_name=server_name,
         ciphers=list(ciphers) if ciphers is not None else DEFAULT_QUIC_CIPHERS,

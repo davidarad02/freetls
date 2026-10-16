@@ -713,6 +713,12 @@ with freetls.QUICSession(spec) as s:
   `docs/route-c-plan.md`). Session resumption is **not** deferred: it works
   through the standard spec fields (`session_cache` plus a `pre_shared_key`
   extension), like the TCP path.
+- **A custom `transport_parameters=` list must be complete.** uQUIC takes the
+  transport parameters from the spec alone, so a partial list (e.g. only
+  `max_idle_timeout`) still handshakes but then breaks every HTTP/3 request. Use
+  `modes.default_quic_transport_parameters()` as the base; the engine only injects
+  `initial_source_connection_id` and, when `quic_datagrams` is set,
+  `max_datagram_frame_size`.
 
 ## Streaming & content decoding
 
@@ -1020,10 +1026,17 @@ profiles.h3_bundle(name, *, quic=None, datagrams=False, ...) -> FingerprintSpec
 
 ```python
 engine.version() -> str
+engine.abi_version() -> int                    # C ABI version (3)
+engine.active_sessions() -> int                # live native sessions (leak checks)
 engine.preset_list() -> list[str]              # uTLS preset names (generated)
 engine.preset_raw(name) -> bytes               # offline ClientHello for a preset
 engine.preset_raw_opts(name, no_sni=False, alpn=None) -> bytes
 engine.chlo_raw(chlo_json) -> bytes            # offline ClientHello for a JSON spec
+engine.spec_raw(spec_json) -> bytes            # offline ClientHello for any spec
+engine.supported_ciphers() -> list[int]        # ciphers the engine can complete
+engine.supported_extensions() -> list[int]     # extensions safe-mode allows
+engine.quic_id_list() -> list[str]             # uQUIC QUIC preset names
+engine.quic_id_raw(name, no_sni=False, alpn=None) -> bytes   # offline QUIC ClientHello
 ```
 
 ### `verify`
@@ -1198,7 +1211,7 @@ safe to call from multiple threads, sessions are independent, and every
 entrypoint wraps its body in `recover()` so a Go panic becomes a Python error
 instead of aborting the host process. The C surface carries an ABI version
 (`engine.abi_version()`, currently `3`); the binding refuses to load an engine
-whose major version does not match, so a stale `libfreetls.so` fails loudly.
+whose ABI version does not match exactly, so a stale `libfreetls.so` fails loudly.
 
 A single `TLSSession` is **not** internally synchronised — use one session per
 thread (or the transports, which open a connection per request). `QUICSession`

@@ -22,6 +22,10 @@ internal/handshake/freetls_evp_ccm_test.go \
 internal/handshake/freetls_evp_ccm_stub_test.go \
 internal/handshake/freetls_server_hello.go"
 
+# Nested modules that are committed in the fork but omitted from the Go module
+# zip, so a plain re-copy of the upstream module would drop them.
+OURS_DIRS="integrationtests/gomodvendor"
+
 find_go() {
     for cand in "${FREETLS_GO:-}" go "$HOME/.local/go/bin/go" \
         /usr/local/go/bin/go /opt/go/bin/go; do
@@ -61,6 +65,12 @@ for f in $OURS; do
         cp -a "$FORK/$f" "$STAGE/$f"
     fi
 done
+for d in $OURS_DIRS; do
+    if [ -d "$FORK/$d" ]; then
+        mkdir -p "$STAGE/$(dirname "$d")"
+        cp -a "$FORK/$d" "$STAGE/$d"
+    fi
+done
 # The patch set is ours too; preserve it across the re-copy.
 if [ -d "$FORK/patches" ]; then cp -a "$FORK/patches" "$STAGE/patches"; fi
 
@@ -75,6 +85,13 @@ for f in $OURS; do
         mkdir -p "$FORK/$(dirname "$f")"
         cp -a "$STAGE/$f" "$FORK/$f"
         RESTORED="$RESTORED $f"
+    fi
+done
+for d in $OURS_DIRS; do
+    if [ -d "$STAGE/$d" ]; then
+        mkdir -p "$FORK/$(dirname "$d")"
+        cp -a "$STAGE/$d" "$FORK/$d"
+        RESTORED="$RESTORED $d"
     fi
 done
 echo "[rebase] restored our files:$RESTORED"

@@ -47,6 +47,7 @@ class QUICSession:
         self._closed = False
         self._handshaked = False
         self._client_hello = b""
+        self._server_hello = b""
         self._fp: dict | None = None
 
     # -- connection ----------------------------------------------------------
@@ -85,10 +86,27 @@ class QUICSession:
         sock: socket.socket,
         server_hostname: str,
         do_handshake_on_connect: bool = True,
+        host: str | None = None,
+        port: int | None = None,
     ) -> QUICSession:
-        """Wrap an already-connected UDP socket, performing the QUIC handshake."""
+        """Wrap a UDP socket and (by default) perform the QUIC handshake.
+
+        The socket is deliberately *not* connected (quic-go sends with
+        ``WriteTo``), so the peer address cannot be inferred in general: pass
+        ``host``/``port``, or rely on ``connect()`` (which sets it) or on an
+        already-connected socket.
+        """
         self._sock = sock
         self._sni = server_hostname or self.spec.server_name or ""
+        if host is not None and port is not None:
+            self._remote = (host, int(port))
+        elif self._remote is None:
+            try:
+                peer = sock.getpeername()
+            except OSError:
+                peer = None
+            if peer:
+                self._remote = (str(peer[0]), int(peer[1]))
         if do_handshake_on_connect:
             self.do_handshake()
         return self
@@ -114,6 +132,7 @@ class QUICSession:
             raise
         self._handshaked = True
         self._client_hello = self._engine.client_hello()
+        self._server_hello = self._engine.server_hello()
         self._fp = None
 
     def _cleanup(self) -> None:
@@ -186,10 +205,12 @@ class QUICSession:
         return ja4s_from_bytes(sh, transport="q").get("ja4s")
 
     def server_hello(self) -> bytes:
-        """The ServerHello, if the engine captured one (empty otherwise)."""
-        if self._engine is None:
-            return b""
-        return self._engine.server_hello()
+        """The ServerHello captured at handshake time (empty if none).
+
+        Cached at handshake time, like :class:`~freetls.TLSSession`, so it
+        survives :meth:`close` (the JA4Sq stays readable after the session ends).
+        """
+        return self._server_hello
 
     # -- requests ------------------------------------------------------------
     def _require_engine(self) -> EngineSession:

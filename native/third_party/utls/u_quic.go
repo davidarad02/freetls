@@ -18,6 +18,8 @@ type UQUICConn struct {
 	conn *UConn
 
 	sessionTicketSent bool
+
+	freetlsSH []byte // [freetls] ServerHello captured for JA4Sq
 }
 
 // UQUICClient returns a new TLS client side connection using QUICTransport as the
