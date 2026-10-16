@@ -117,6 +117,14 @@ def test_quic_datagrams_serialise_and_copy():
     assert "quic_datagrams" not in _spec().to_engine()
 
 
+def test_quic_early_data_serialises_but_is_deferred():
+    """quic_early_data is reserved for the deferred 0-RTT work (D13)."""
+    spec = _spec(quic_early_data=True)
+    assert spec.to_engine()["quic_early_data"] is True
+    assert spec.copy().quic_early_data is True
+    assert "quic_early_data" not in _spec().to_engine()
+
+
 def test_safe_mode_whitelists_transport_parameters():
     assert 0x0039 in engine.supported_extensions()
 

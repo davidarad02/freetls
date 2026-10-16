@@ -123,6 +123,23 @@ def test_http3_datagram_requires_opt_in(h3_server):
         session.close()
 
 
+def test_quic_early_data_is_ignored(h3_server):
+    """quic_early_data is reserved for the deferred 0-RTT work: the engine must
+    not attempt 0-RTT, so the handshake completes normally and does not resume."""
+    spec = _quic_spec()
+    spec.quic_early_data = True
+    session = QUICSession(spec)
+    try:
+        session.connect("127.0.0.1", h3_server.port, timeout=15)
+        assert session.selected_alpn_protocol() == "h3"
+        assert session.did_resume is False
+        resp = session.request("/")
+        assert resp["status"] == 200
+        assert b"hello-h3" in resp["body"]
+    finally:
+        session.close()
+
+
 def test_httpx_http3_transport(h3_server):
     import httpx
 

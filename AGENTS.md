@@ -90,6 +90,11 @@ P4/P5 (profiles/catalog/modes/docs + deferred hooks) are implemented.
   `native/third_party/uquic/patches/freetls.patch`) plus a tag-gated AEAD in each
   fork. `make test-uquic` runs both builds. CCM is **not negotiable end-to-end**
   against Go/OpenSSL servers; the QUIC suite matrix skips those rows.
+- **Deferred but designed for (D13)**: 0-RTT (`UTransport.DialEarly`), session
+  resumption/tickets and ECH over QUIC. `FingerprintSpec.quic_early_data` is
+  serialised and **ignored** by the engine (the handshake always uses `Dial`, not
+  `DialEarly`). All are additive fields/exports → **no ABI bump**. WebTransport
+  is out of scope.
 
 ### QUIC findings worth carrying forward
 
