@@ -66,9 +66,12 @@ func (s *session) h3Client() (*http3.ClientConn, error) {
 		// Accept-Encoding header and transparently un-gzipping responses, so an
 		// H3 request carries exactly the caller's headers (like the H2 path).
 		tr := &http3.Transport{EnableDatagrams: qs.datagrams, DisableCompression: true}
-		qs.cc = tr.NewClientConn(qs.conn)
+		cc := tr.NewClientConn(qs.conn)
+		qs.ccMu.Lock()
+		qs.cc = cc
+		qs.ccMu.Unlock()
 	})
-	return qs.cc, nil
+	return qs.clientConn(), nil
 }
 
 // buildH3Request turns the request spec into an *http.Request whose URL carries
@@ -99,6 +102,9 @@ func buildH3Request(s *session, req h3RequestSpec, body io.Reader) (*http.Reques
 		return nil, err
 	}
 	hreq.Host = authority
+	if !httpguts.ValidHostHeader(authority) {
+		return nil, fmt.Errorf("invalid :authority %q", authority)
+	}
 	for _, h := range req.Headers {
 		hreq.Header.Add(h[0], h[1])
 	}

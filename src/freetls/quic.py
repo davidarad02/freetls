@@ -11,6 +11,7 @@ See ``docs/route-c-plan.md``.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import socket
 
@@ -21,6 +22,17 @@ from .model import FingerprintSpec
 
 # HTTP/3 is negotiated over ALPN; QUIC connections never offer h2/http1.1.
 DEFAULT_QUIC_ALPN = ["h3"]
+
+
+def _bracket_ipv6(host: str) -> str:
+    """Bracket an IPv6 literal for a URL authority; leave other hosts unchanged."""
+    if host.startswith("["):
+        return host
+    try:
+        ipaddress.IPv6Address(host)
+    except ValueError:
+        return host
+    return f"[{host}]"
 
 
 class QUICSession:
@@ -129,6 +141,13 @@ class QUICSession:
     def __exit__(self, *exc) -> None:
         self.close()
 
+    def __del__(self) -> None:
+        try:
+            if not getattr(self, "_closed", True):
+                self.close()
+        except Exception:  # noqa: BLE001 - never raise from a finalizer
+            pass
+
     # -- fingerprints --------------------------------------------------------
     @property
     def client_hello(self) -> bytes:
@@ -190,8 +209,7 @@ class QUICSession:
         host = self._sni or (self._remote[0] if self._remote else "")
         if not host:
             return ""
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
+        host = _bracket_ipv6(host)
         if self._remote is not None and self._remote[1] not in (0, 443):
             return f"{host}:{self._remote[1]}"
         return host

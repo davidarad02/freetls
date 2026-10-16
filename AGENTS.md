@@ -82,20 +82,21 @@ P4/P5 (profiles/catalog/modes/docs + deferred hooks) are implemented.
   `ja4q`/`ja4q_r`/`ja4sq`); `src/freetls/fingerprint/quic.py` (Initial parsing /
   key schedule). `Extension.quic_transport_parameters` + `QuicInitialSpec` +
   `FingerprintSpec.quic`/`quic_id`/`quic_datagrams`/`quic_early_data`.
-- **Transports**: `transport/_http3.py` mirrors `_http2.py`;
-  `_http2.negotiated_protocol` drives dispatch. HTTP/3 is **opt-in**
+- **Transports**: `transport/_http3.py` mirrors `_http2.py`. HTTP/3 is **opt-in**
   (`FreeTLSTransport(..., http3=True)`, `JA4Adapter(..., http3=True)`) because
-  Alt-Svc/HTTPS-RR discovery is out of scope. aiohttp stays HTTP/1.1-only.
+  Alt-Svc/HTTPS-RR discovery is out of scope; `_http2.negotiated_protocol` drives
+  the H2-vs-H1 choice. aiohttp stays HTTP/1.1-only.
 - **EVP/CCM parity**: two build-tag-gated hunks in uQUIC
   (`internal/handshake/cipher_suite.go`, `header_protector.go`, in
   `native/third_party/uquic/patches/freetls.patch`) plus a tag-gated AEAD in each
   fork. `make test-uquic` runs both builds. CCM is **not negotiable end-to-end**
   against Go/OpenSSL servers; the QUIC suite matrix skips those rows.
-- **Deferred but designed for (D13)**: 0-RTT (`UTransport.DialEarly`), session
-  resumption/tickets and ECH over QUIC. `FingerprintSpec.quic_early_data` is
-  serialised and **ignored** by the engine (the handshake always uses `Dial`, not
-  `DialEarly`). All are additive fields/exports → **no ABI bump**. WebTransport
-  is out of scope.
+- **Deferred but designed for (D13)**: 0-RTT (`UTransport.DialEarly`) and ECH over
+  QUIC. `FingerprintSpec.quic_early_data` is serialised and **ignored** by the
+  engine (the handshake always uses `Dial`, not `DialEarly`). Both are additive
+  fields/exports → **no ABI bump**. Session resumption is **not** deferred: it
+  works through the standard `session_cache` + `pre_shared_key` spec fields.
+  WebTransport is out of scope.
 
 ### QUIC findings worth carrying forward
 
@@ -299,15 +300,15 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - **Timeouts are engine-side.** `freetls_set_timeout` (ms) drives the Go read
   deadline; `TLSSession.settimeout` updates both the Python socket and the
   engine. Sessions are blocking-only (`setblocking(False)` raises).
-- **HTTP/2 and HTTP/3 in the transports are ALPN-driven.** `transport/urllib3_conn.py`
-  (requests) and `transport/httpx_transport.py` call the Go H2 client when
-  `selected_alpn_protocol() == "h2"` (via `transport/_http2.py`), else HTTP/1.1.
-  HTTP/3 is **opt-in** (`http3=True`): the httpx `_open` branches to a
-  `QUICSession` before the TCP connect and `urllib3_conn` opens a UDP session,
-  then `transport/_http3.py` runs the request. `_http2.negotiated_protocol`
-  centralises the ALPN decision. aiohttp cannot speak HTTP/2 (or HTTP/3), so
-  `transport/aiohttp_connector.py` strips `h2` from the offered ALPN.
-  Hop-by-hop headers are filtered for H2/H3.
+- **HTTP/2 in the transports is ALPN-driven; HTTP/3 is opt-in.**
+  `transport/urllib3_conn.py` (requests) and `transport/httpx_transport.py` call
+  the Go H2 client when `selected_alpn_protocol() == "h2"` (via
+  `transport/_http2.py`), else HTTP/1.1. HTTP/3 is **opt-in** (`http3=True`): the
+  httpx `_open` branches to a `QUICSession` before the TCP connect and
+  `urllib3_conn` opens a UDP session, then `transport/_http3.py` runs the request.
+  `_http2.negotiated_protocol` centralises the H2-vs-H1 ALPN choice. aiohttp
+  cannot speak HTTP/2 (or HTTP/3), so `transport/aiohttp_connector.py` strips `h2`
+  from the offered ALPN. Hop-by-hop headers are filtered for H2/H3.
 - **Certificate suite.** Trust/verify/pinning/mTLS spec fields
   (`verify`, `check_hostname`, `system_roots`, `root_ca`, `ca_dir`, `cadata`,
   `client_cert[_pem]`, `client_key[_pem]`, `pinned_sha256`) live in

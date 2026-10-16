@@ -32,6 +32,9 @@ func main() {
 		}
 		fmt.Fprint(w, "ok")
 	})
+	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusFound)
+	})
 	// RFC 9297: echo every HTTP/3 datagram received on the request's flow.
 	mux.HandleFunc("/echo-datagram", func(w http.ResponseWriter, r *http.Request) {
 		streamer, ok := w.(http3.HTTPStreamer)

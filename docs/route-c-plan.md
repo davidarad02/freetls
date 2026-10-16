@@ -56,7 +56,7 @@ The two hardest pieces already existed and were unused:
 | 10 | **Session API**: new `QUICSession`, **concurrent**. |
 | 11 | **Tests**: local HTTP/3 server, UDP pcap verification, JA4q/JA4Sq vectors, QUIC suite matrix. |
 | 12 | **Out of scope**: proxies over QUIC (CONNECT-UDP/MASQUE); Alt-Svc / HTTPS-RR discovery. |
-| 13 | **Deferred, designed for**: 0-RTT, session resumption, ECH over QUIC. |
+| 13 | **Deferred, designed for**: 0-RTT and ECH over QUIC (session resumption works through `session_cache` + `pre_shared_key`). |
 | 14 | **HTTP/3 datagrams (RFC 9297)**: in scope; WebTransport deferred. |
 
 **Explicit exclusions** (decision 6): no transport-parameter fingerprint
@@ -181,17 +181,18 @@ request and datagram through it. That keeps exactly one
 avoids a second stream-accept loop (which a `Transport` would start).
 
 - `native/httpx_h3.go` exports `freetls_h3_request` (JSON in/out, mirroring
-  `freetls_h2_request`) and `freetls_h3_datagram_{open,send,recv}`. All are
+  `freetls_h2_request`) and `freetls_h3_datagram_{open,send,recv,close}`. All are
   `recover()`-wrapped and return `C.CString`.
 - Per-request `context.WithTimeout` from `timeout_ms`/`timeout`.
 
 ### Python
 
 - `_cffi.py`: `_CDEF` entries + `EngineSession.h3_request` /
-  `h3_datagram_open` / `h3_datagram_send` / `h3_datagram_recv`.
+  `h3_datagram_open` / `h3_datagram_send` / `h3_datagram_recv` /
+  `h3_datagram_close`.
 - `QUICSession.request(path, method, headers, body)` mirrors `h2_request`
   (buffered body) and adds the JA4H. `open_datagram_flow` / `send_datagram` /
-  `recv_datagram` expose RFC 9297 datagrams (opt-in via
+  `recv_datagram` / `close_datagram_flow` expose RFC 9297 datagrams (opt-in via
   `FingerprintSpec.quic_datagrams`).
 
 ### Transports
@@ -237,10 +238,11 @@ a `/echo-datagram` handler.
 ## 7. P5 — deferred hooks
 
 - Datagrams are implemented (P3).
-- **Deferred but designed for** (D13): 0-RTT (`UTransport.DialEarly`), session
-  resumption/tickets, ECH over QUIC. `FingerprintSpec.quic_early_data` is
-  serialised and ignored by the engine; all are additive fields/exports, so they
-  need **no** ABI bump.
+- **Deferred but designed for** (D13): 0-RTT (`UTransport.DialEarly`) and ECH over
+  QUIC. `FingerprintSpec.quic_early_data` is serialised and ignored by the engine;
+  both are additive fields/exports, so they need **no** ABI bump. Session
+  resumption is **not** deferred: it works through the standard `session_cache`
+  and `pre_shared_key` spec fields (a second QUIC connection resumes).
 - **WebTransport** is out of scope (a separate module).
 
 ## 8. Testing and verification

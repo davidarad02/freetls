@@ -33,3 +33,10 @@ def test_authority_prefers_sni_host():
 def test_authority_explicit_override_and_empty():
     assert _session(remote=("127.0.0.1", 8443))._authority("other:1234") == "other:1234"
     assert _session()._authority() == ""
+
+
+def test_authority_only_brackets_real_ipv6():
+    # A non-IPv6 host containing ':' must not be bracketed.
+    assert _session(sni="example.com:8443")._authority() == "example.com:8443"
+    # An already-bracketed literal is left alone.
+    assert _session(sni="[::1]:8443")._authority() == "[::1]:8443"

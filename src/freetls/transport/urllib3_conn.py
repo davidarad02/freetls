@@ -78,6 +78,15 @@ class Ja4HTTPSConnection(HTTPSConnection):
     def _h2_enabled(self) -> bool:
         return self.ja4_session is not None and _http2.negotiated_h2(self.ja4_session)
 
+    @property
+    def is_connected(self) -> bool:
+        # A QUICSession is not a real socket (no fileno), so urllib3's default
+        # poll-based liveness check (wait_for_read -> poll.register) cannot be
+        # used; the engine owns the connection's liveness.
+        if self._http3:
+            return self.sock is not None
+        return super().is_connected
+
     # -- HTTP dispatch ------------------------------------------------------
     def request(self, method, url, body=None, headers=None, **kwargs):  # type: ignore[override]
         if self.sock is None:
@@ -114,6 +123,10 @@ class Ja4HTTPSConnection(HTTPSConnection):
         out_headers = HTTPHeaderDict()
         for k, v in decoded_headers:
             out_headers.add(k, v)
+        # The response body is fully buffered, so the QUIC session is no longer
+        # needed. Close it now: urllib3 cannot pool a QUICSession (it is not a
+        # real socket), so without this a session would leak per request.
+        self.close()
         return U3Response(
             body=io.BytesIO(data),
             headers=out_headers,

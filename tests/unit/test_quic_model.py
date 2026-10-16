@@ -75,6 +75,31 @@ def test_transport_parameter_validation():
         TransportParameter("max_idle_timeout")
 
 
+def test_fake_transport_parameter_with_reserved_id_is_rejected():
+    """A fake param whose id the QUIC stack handles must error, not abort the host."""
+    from freetls import QUICSession
+
+    spec = FingerprintSpec(
+        ciphers=[0x1301, 0x1302, 0x1303],
+        extensions=[
+            Extension.alpn("h3"),
+            Extension.quic_transport_parameters(
+                TransportParameter.varint("max_idle_timeout", 30000),
+                TransportParameter.fake(0x20, "aabbccdd"),
+            ),
+        ],
+        vers_min=TLS13,
+        vers_max=TLS13,
+        quic=QuicInitialSpec(),
+    )
+    session = QUICSession(spec)
+    try:
+        with pytest.raises(Exception):
+            session.connect("127.0.0.1", 9, timeout=2)
+    finally:
+        session.close()
+
+
 def test_extension_serialises_transport_parameters():
     ext = Extension.quic_transport_parameters(
         TransportParameter.varint("initial_max_data", 1048576),

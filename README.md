@@ -694,7 +694,8 @@ with freetls.QUICSession(spec) as s:
   merges 28 QUIC entries (7 uQUIC fingerprints × 4 variants) with the TCP ones,
   and `find_ja4`/`search` span both.
 - RFC 9297 datagrams are opt-in: set `spec.quic_datagrams = True`, then use
-  `open_datagram_flow()` / `send_datagram()` / `recv_datagram()`.
+  `open_datagram_flow()` / `send_datagram()` / `recv_datagram()` /
+  `close_datagram_flow()`.
 - Through the transports, HTTP/3 is opt-in:
   `FreeTLSTransport(..., http3=True)` and `JA4Adapter(..., http3=True)`.
 
@@ -708,8 +709,10 @@ with freetls.QUICSession(spec) as s:
   covered at the AEAD level); see [Limitations](#limitations).
 - **Response header order is not preserved** (Go's `http.Header` is a map);
   duplicate values are kept. The H2 path does preserve order.
-- **0-RTT, session resumption and ECH over QUIC are not implemented yet**
-  (designed for; see `docs/route-c-plan.md`).
+- **0-RTT and ECH over QUIC are not implemented yet** (designed for; see
+  `docs/route-c-plan.md`). Session resumption is **not** deferred: it works
+  through the standard spec fields (`session_cache` plus a `pre_shared_key`
+  extension), like the TCP path.
 
 ## Streaming & content decoding
 
@@ -947,7 +950,8 @@ or `wrap_socket(sock, server_hostname)`.
   `peer_application_settings`.
 - HTTP/2: `h2_request(...)`.
 - HTTP/3 (`QUICSession`): `request(...)`, `open_datagram_flow(...)`,
-  `send_datagram(...)`, `recv_datagram(...)`, `ja4q`, `ja4q_r`, `ja4sq`.
+  `send_datagram(...)`, `recv_datagram(...)`, `close_datagram_flow(...)`,
+  `ja4q`, `ja4q_r`, `ja4sq`.
 
 ### `TLSContext`
 
@@ -985,9 +989,11 @@ quic_true_random(...)
 default_quic_transport_parameters() -> list[TransportParameter]
 ```
 
-`n_random_ciphers`/`n_random_extensions` (and `n_ciphers`/`n_extensions`) default to
-half the pool (which maximises the number of distinct JA4 values), so leave them
-unset unless you want a specific count.
+Leaving `n_random_ciphers`/`n_random_extensions` (and `n_ciphers`/`n_extensions`)
+unset uses the mode defaults: the random *extension* count is half the padding
+pool (23, which maximises the number of distinct JA4 values), while the random
+*cipher* count is 10 (`partial_random`) / 60 (`true_random`) in unsafe mode and
+half of the engine's backed pool under safe mode.
 
 ### `profiles`
 
@@ -1341,8 +1347,9 @@ around rather than discovered in production.
   Initial-packet / transport-parameter control, the TLS-1.3-over-QUIC handshake,
   JA4q/JA4Sq, RFC 9297 datagrams and `h3` ALPN are implemented (see
   [HTTP/3](#http3)); there is no Alt-Svc / HTTPS-RR discovery, no
-  CONNECT-UDP/MASQUE, aiohttp stays HTTP/1.1-only, and 0-RTT / session
-  resumption / ECH over QUIC are deferred (designed for).
+  CONNECT-UDP/MASQUE, aiohttp stays HTTP/1.1-only, and 0-RTT / ECH over QUIC are
+  deferred (designed for). Session resumption works through the standard spec
+  fields.
 - **HTTP/2 coverage is fingerprint-shaped, not production-shaped.** See
   [HTTP/2 limitations](#http2-limitations) for the detail: single-frame
   HEADERS/DATA writes with no `MAX_FRAME_SIZE` splitting (a **known limitation**

@@ -279,3 +279,52 @@ def test_httpx_http3_rejects_proxy(h3_server):
     with httpx.Client(transport=transport) as client:
         with pytest.raises(httpx.UnsupportedProtocol):
             client.get(f"https://127.0.0.1:{h3_server.port}/")
+
+
+def test_http3_invalid_authority_fails_fast(h3_server):
+    """A host that is invalid as :authority errors immediately, not after the deadline."""
+    session = _connect(h3_server)
+    try:
+        start = time.monotonic()
+        resp = session.request("/", authority="exa<mple.com")
+        assert resp.get("error"), resp
+        assert time.monotonic() - start < 5
+    finally:
+        session.close()
+
+
+def test_requests_http3_reuses_one_connection(h3_server):
+    """requests/urllib3 H3 closes each connection's session (no per-request leak)."""
+    import requests
+
+    from freetls import JA4Adapter
+
+    before = engine.active_sessions()
+    adapter = JA4Adapter(spec=_quic_spec(), http3=True)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    try:
+        for _ in range(3):
+            resp = session.get(f"https://127.0.0.1:{h3_server.port}/")
+            assert resp.status_code == 200
+            assert b"hello-h3" in resp.content
+        assert engine.active_sessions() == before
+    finally:
+        session.close()
+    assert engine.active_sessions() == before
+
+
+def test_requests_http3_follows_redirect(h3_server):
+    import requests
+
+    from freetls import JA4Adapter
+
+    adapter = JA4Adapter(spec=_quic_spec(), http3=True)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    try:
+        resp = session.get(f"https://127.0.0.1:{h3_server.port}/redirect")
+        assert resp.status_code == 200
+        assert b"hello-h3" in resp.content
+    finally:
+        session.close()

@@ -28,6 +28,25 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+// reservedQuicTPIDs are the transport-parameter ids the QUIC stack switches on.
+// A `fake` parameter with one of these ids would be misinterpreted (uQUIC's
+// PopulateFromUQUIC type-asserts on them, which panics for a fake), so it is
+// rejected in favour of the typed kind.
+var reservedQuicTPIDs = map[uint64]bool{
+	0x01: true, // max_idle_timeout
+	0x04: true, // initial_max_data
+	0x05: true, // initial_max_stream_data_bidi_local
+	0x06: true, // initial_max_stream_data_bidi_remote
+	0x07: true, // initial_max_stream_data_uni
+	0x08: true, // initial_max_streams_bidi
+	0x09: true, // initial_max_streams_uni
+	0x0b: true, // max_ack_delay
+	0x0c: true, // disable_active_migration
+	0x0e: true, // active_connection_id_limit
+	0x0f: true, // initial_source_connection_id
+	0x20: true, // max_datagram_frame_size
+}
+
 // tpJSON is one QUIC transport parameter, carried in the ClientHello's ext 57.
 type tpJSON struct {
 	Kind     string   `json:"kind"`
@@ -65,10 +84,19 @@ type quicState struct {
 	// connection, so there is exactly one quic.Transport/PacketConn.
 	cc     *http3.ClientConn
 	ccOnce sync.Once
+	ccMu   sync.Mutex
 	// dg holds the request streams opened for RFC 9297 datagram flows, keyed by
 	// their stream ID.
 	dgMu sync.Mutex
 	dg   map[quic.StreamID]*http3.RequestStream
+}
+
+// clientConn returns the session's HTTP/3 ClientConn under its lock, so a
+// concurrent close() cannot race the pointer read/write.
+func (qs *quicState) clientConn() *http3.ClientConn {
+	qs.ccMu.Lock()
+	defer qs.ccMu.Unlock()
+	return qs.cc
 }
 
 // quicPtr returns the session's QUIC state under the session lock, so a
@@ -164,6 +192,12 @@ func buildTransportParameter(p tpJSON) (utls.TransportParameter, error) {
 	case "fake":
 		if p.ID == nil || *p.ID == 0 {
 			return nil, errors.New("fake transport parameter requires a non-zero id")
+		}
+		if reservedQuicTPIDs[*p.ID] {
+			return nil, fmt.Errorf(
+				"transport parameter id 0x%x is handled by the QUIC stack; use the typed kind instead of fake",
+				*p.ID,
+			)
 		}
 		b, err := hexOrEmpty(p.Data)
 		if err != nil {
@@ -271,8 +305,8 @@ func closeQUIC(s *session) {
 	if qs == nil {
 		return
 	}
-	if qs.cc != nil {
-		_ = qs.cc.CloseWithError(0, "")
+	if cc := qs.clientConn(); cc != nil {
+		_ = cc.CloseWithError(0, "")
 	}
 	if qs.conn != nil {
 		_ = qs.conn.CloseWithError(0, "")
@@ -509,10 +543,10 @@ func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, p
 		cErr(s, err)
 		return -8
 	}
+	s.quicSH = conn.FreetlsServerHello()
 	s.quicMu.Lock()
 	s.quic = &quicState{pc: pc, tr: tr, conn: conn, spec: qspec, remote: remote, datagrams: s.quicDgram}
 	s.quicMu.Unlock()
-	s.quicSH = conn.FreetlsServerHello()
 	return 0
 }
 
@@ -539,6 +573,14 @@ func dialQUIC(
 	}
 	resc := make(chan result, 1)
 	go func() {
+		// A panic anywhere in the uQUIC dial (e.g. an unchecked type assertion
+		// on a malformed transport parameter) would otherwise abort the host
+		// process, since this goroutine is outside the export's recover().
+		defer func() {
+			if r := recover(); r != nil {
+				resc <- result{err: fmt.Errorf("quic dial panic: %v", r)}
+			}
+		}()
 		c, err := tr.Dial(ctx, remote, cfg, qcfg)
 		resc <- result{c, err}
 	}()

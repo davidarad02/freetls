@@ -294,7 +294,10 @@ def _crypto_stream(packets: Iterable[bytes]) -> bytes:
                 continue
             off, p = read_varint(frame, 1)
             clen, p = read_varint(frame, p)
-            fragments[off] = frame[p : p + clen]
+            data = frame[p : p + clen]
+            prev = fragments.get(off)
+            if prev is None or len(data) > len(prev):
+                fragments[off] = data
     if not fragments:
         raise QuicParseError("no CRYPTO frames in Initial packets")
     # Place every fragment (overlapping retransmissions included), then require
