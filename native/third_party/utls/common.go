@@ -755,6 +755,11 @@ type Config struct {
 	PskIdentity string
 	Psk         []byte
 
+	// SrpUsername and SrpPassword enable the TLS 1.2 SRP cipher suites
+	// (RFC 5054). Both must be set. freetls addition.
+	SrpUsername string
+	SrpPassword string
+
 	// InsecureSkipTimeVerify controls whether a client verifies the server's
 	// certificate chain against time. If InsecureSkipTimeVerify is true,
 	// crypto/tls accepts the certificate even when it is expired.

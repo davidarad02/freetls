@@ -309,6 +309,8 @@ func certlessKA(ka keyAgreement) bool {
 		return k.auth == dhAuthAnon
 	case *pskKeyAgreement, *dhePSKKeyAgreement, *ecdhePSKKeyAgreement:
 		return true
+	case *srpKeyAgreement:
+		return k.auth == srpAuthSRP
 	default:
 		return false
 	}

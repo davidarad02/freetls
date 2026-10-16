@@ -20,7 +20,8 @@ freetls_supported.go cipher_evp_register.go aead_evp.go block_evp.go \
 evp_cgo.go evp_freetls_test.go \
 ffdhe_key_agreement.go ffdhe_dsa.go ffdhe_ciphers.go ffdhe_ciphers_evp.go \
 ffdhe_freetls_test.go \
-psk_key_agreement.go psk_ciphers.go psk_ciphers_evp.go psk_freetls_test.go"
+psk_key_agreement.go psk_ciphers.go psk_ciphers_evp.go psk_freetls_test.go \
+srp.go srp_ciphers.go srp_freetls_test.go"
 
 find_go() {
     for cand in "${FREETLS_GO:-}" go "$HOME/.local/go/bin/go" \

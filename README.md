@@ -545,8 +545,8 @@ Switch engines at runtime (no restart) with the string-free API:
 
 ```python
 import freetls
-freetls.use_engine(freetls.Engine.GO)      # 72 suites
-freetls.use_engine(freetls.Engine.WIDE)    # 138 suites (default)
+freetls.use_engine(freetls.Engine.GO)      # 78 suites
+freetls.use_engine(freetls.Engine.WIDE)    # 144 suites (default)
 with freetls.engine_context(freetls.Engine.GO):   # scoped, restored on exit
     ...
 print(freetls.current_engine())            # EngineInfo(kind, path)
@@ -731,7 +731,7 @@ session.getpeercert()                   # dict (subject/issuer/SAN/…) via cryp
 session.peer_chain()                    # list[DER], leaf first
 ```
 
-### Pre-shared keys (PSK) and anonymous suites
+### Pre-shared keys (PSK), SRP and anonymous suites
 
 The TLS 1.2 PSK family (RFC 4279/5487/5489) is supported by setting both PSK
 credential fields on the spec. ``psk`` is hex-encoded. Offer a PSK cipher suite
@@ -743,8 +743,10 @@ spec.psk_identity = "client-id"
 spec.psk = "0102030405060708090a0b0c0d0e0f10"   # hex
 ```
 
-Pure PSK / DHE-PSK / ECDHE-PSK / RSA-PSK suites are supported. Anonymous (ADH)
-suites provide no server authentication and are off by default; opt in with
+Pure PSK / DHE-PSK / ECDHE-PSK / RSA-PSK suites are supported. The TLS 1.2 SRP
+family (RFC 5054) uses ``spec.srp_username`` and ``spec.srp_password`` (the
+ClientHello carries the ``srp`` username extension). Anonymous (ADH) suites
+provide no server authentication and are off by default; opt in with
 ``spec.anonymous = True``.
 
 ---
@@ -1175,11 +1177,13 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
 - **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot
   produce more than ~2^48 distinct values per part.
 - **Cipher completion is bounded by the backend.** The default (wide) engine
-  completes 138 suites; the Go-only alternate completes 72. The wide engine adds
+  completes 144 suites; the Go-only alternate completes 78. The wide engine adds
   ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM. Finite-field DHE
-  (DHE-RSA/DHE-DSS/ADH) and the TLS 1.2 PSK family (PSK/ECDHE-PSK/DHE-PSK/
-  RSA-PSK) are implemented in the forked uTLS engine. SRP, GOST and suites
+  (DHE-RSA/DHE-DSS/ADH), the TLS 1.2 PSK family (PSK/ECDHE-PSK/DHE-PSK/RSA-PSK)
+  and SRP (RFC 5054) are implemented in the forked uTLS engine. GOST and suites
   OpenSSL 3.5.5 does not implement are out of scope. TLS 1.3 CCM is implemented
-  but no local OpenSSL/Go server negotiates it (covered at the AEAD level).
+  but no local OpenSSL/Go server negotiates it (covered at the AEAD level); SRP
+  is verified at the key-agreement and offer level because OpenSSL 3.5.5's
+  deprecated ``s_server -srpvfile`` path does not complete.
 - Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
   system on those platforms; this checkout is exercised on Linux/CPython 3.14.

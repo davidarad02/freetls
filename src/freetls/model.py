@@ -229,6 +229,9 @@ class FingerprintSpec:
     # set to use the PSK/ECDHE-PSK/DHE-PSK/RSA-PSK cipher suites.
     psk_identity: str | None = None
     psk: str | None = None
+    # TLS 1.2 SRP credentials (RFC 5054).
+    srp_username: str | None = None
+    srp_password: str | None = None
     root_ca: str | None = None
     timeout_ms: int = 30000
 
@@ -282,6 +285,8 @@ class FingerprintSpec:
             "anonymous": self.anonymous,
             "psk_identity": self.psk_identity or "",
             "psk": self.psk or "",
+            "srp_username": self.srp_username or "",
+            "srp_password": self.srp_password or "",
             "root_ca": self.root_ca or "",
             "timeout_ms": self.timeout_ms,
             "extensions": [e.to_engine() for e in self.extensions],
@@ -345,6 +350,8 @@ class FingerprintSpec:
             anonymous=self.anonymous,
             psk_identity=self.psk_identity,
             psk=self.psk,
+            srp_username=self.srp_username,
+            srp_password=self.srp_password,
             root_ca=self.root_ca,
             timeout_ms=self.timeout_ms,
             check_hostname=self.check_hostname,

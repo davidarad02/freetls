@@ -1,6 +1,6 @@
 --- a/common.go
 +++ b/common.go
-@@ -746,6 +746,15 @@
+@@ -746,6 +746,20 @@
  	// testing or in combination with VerifyConnection or VerifyPeerCertificate.
  	InsecureSkipVerify bool
  
@@ -12,6 +12,11 @@
 +	// 5489). Both must be set. freetls addition.
 +	PskIdentity string
 +	Psk         []byte
++
++	// SrpUsername and SrpPassword enable the TLS 1.2 SRP cipher suites
++	// (RFC 5054). Both must be set. freetls addition.
++	SrpUsername string
++	SrpPassword string
 +
  	// InsecureSkipTimeVerify controls whether a client verifies the server's
  	// certificate chain against time. If InsecureSkipTimeVerify is true,

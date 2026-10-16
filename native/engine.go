@@ -77,6 +77,9 @@ type specJSON struct {
 	// hex-encoded.
 	PskIdentity string `json:"psk_identity,omitempty"`
 	Psk         string `json:"psk,omitempty"`
+	// SrpUsername/SrpPassword enable the TLS 1.2 SRP cipher suites (RFC 5054).
+	SrpUsername string `json:"srp_username,omitempty"`
+	SrpPassword string `json:"srp_password,omitempty"`
 
 	// Certificate suite options.
 	CheckHostname *bool    `json:"check_hostname,omitempty"` // default true
@@ -356,6 +359,28 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 		exts = append(exts, ext)
 	}
 
+	// RFC 5054: SRP clients advertise the username in the "srp" extension
+	// (type 12) so the server can select the right verifier.
+	if s.SrpUsername != "" {
+		hasSRP := false
+		for _, e := range s.Extensions {
+			if e.ID != nil && *e.ID == 12 {
+				hasSRP = true
+				break
+			}
+		}
+		if !hasSRP {
+			uname := []byte(s.SrpUsername)
+			if len(uname) == 0 || len(uname) > 255 {
+				return nil, nil, nil, fmt.Errorf("freetls: srp_username must be 1..255 bytes")
+			}
+			data := make([]byte, 0, 1+len(uname))
+			data = append(data, byte(len(uname)))
+			data = append(data, uname...)
+			exts = append(exts, &utls.GenericExtension{Id: 12, Data: data})
+		}
+	}
+
 	chs := &utls.ClientHelloSpec{
 		CipherSuites:       s.Ciphers,
 		CompressionMethods: s.Compression,
@@ -384,6 +409,8 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 			cfg.Psk = psk
 		}
 	}
+	cfg.SrpUsername = s.SrpUsername
+	cfg.SrpPassword = s.SrpPassword
 	// With HelloCustom uTLS refuses to handshake if resumption is enabled but
 	// no ticket/PSK extension is present. This lets a spec opt out cleanly.
 	cfg.PreferSkipResumptionOnNilExtension = true

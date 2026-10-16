@@ -33,6 +33,9 @@ file (see below). Both are rebasable (see `tools/rebase_utls.sh`).
 | `psk_ciphers.go` | PSK suite registration (Go-native AES-GCM/CBC/ChaCha) *(P2)* |
 | `psk_ciphers_evp.go` | PSK suites backed by the EVP bridge (ARIA-GCM/AES-CCM/Camellia-CBC) *(P2)* |
 | `psk_freetls_test.go` | Go tests for the PSK premaster/CKE *(P2)* |
+| `srp.go` | `srpKeyAgreement`: SRP-6a client key exchange (RFC 5054) *(P2)* |
+| `srp_ciphers.go` | SRP suite registration (Go-native AES-CBC) *(P2)* |
+| `srp_freetls_test.go` | Go tests for the SRP-6a key agreement *(P2)* |
 
 `FORK.md` is also ours.
 
@@ -45,7 +48,8 @@ edits upstream files; `tools/rebase_utls.sh` re-applies it after each re-copy:
   skip the Certificate message + `verifyServerCertificate` for certless suites
   (anonymous ADH, PSK, SRP) and gate anonymous suites behind
   `Config.Anonymous`.
-- `common.go`: add `Config.Anonymous`, `Config.PskIdentity` and `Config.Psk`.
+- `common.go`: add `Config.Anonymous`, `Config.PskIdentity`, `Config.Psk`,
+  `Config.SrpUsername` and `Config.SrpPassword`.
 
 ## Registration rules (do not break these)
 

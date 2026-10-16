@@ -17,7 +17,7 @@ The approved plan lives in **`docs/route-b-plan.md`**; treat it as the source of
 truth (locked decisions D1–D11, fork/registration mechanics, crypto-bridge
 scope, safe-mode whitelist, risk table, and measured deviations).
 
-Status: **complete.** The wide engine (**138** suites = 72 Go-only + 66
+Status: **complete.** The wide engine (**144** suites = 78 Go-only + 66
 wide-only) is now the **default**; the Go-only engine is an alternate selected at
 runtime via `freetls.use_engine(freetls.Engine.GO)`.
 
@@ -130,10 +130,11 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - `native/engine.go` — TLS engine: JSON spec → uTLS `ClientHelloSpec`,
   `GenericExtension` padding, baseline injection, tee'd ClientHello/ServerHello,
   peer cert, read deadlines. C ABI consumed by cffi.
-- `native/third_party/utls/ffdhe_*.go` / `psk_*.go` — the forked uTLS engine's
-  finite-field DHE (DHE-RSA/DHE-DSS/ADH) and TLS 1.2 PSK (PSK/ECDHE-PSK/DHE-PSK/
-  RSA-PSK) key agreements + suite registration; `patches/freetls.patch` carries
-  the upstream `common.go`/`handshake_client.go` hunks.
+- `native/third_party/utls/ffdhe_*.go` / `psk_*.go` / `srp*.go` — the forked
+  uTLS engine's finite-field DHE (DHE-RSA/DHE-DSS/ADH), TLS 1.2 PSK
+  (PSK/ECDHE-PSK/DHE-PSK/RSA-PSK) and SRP-6a (RFC 5054) key agreements + suite
+  registration; `patches/freetls.patch` carries the upstream
+  `common.go`/`handshake_client.go` hunks.
 - `native/preset_map_gen.go` — **generated** name→`ClientHelloID` map for the
   pinned uTLS (see `tools/gen_presets.py`). The engine also accepts a full uTLS
   `ClientHelloSpec` JSON via the spec's `chlo_json` field (or `profiles.add_profile`),
@@ -224,10 +225,13 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   `model.FingerprintSpec` and `native/engine.go::specJSON`; the engine builds the
   Go `x509` pool, hostname policy, pin callback, and client cert. The full peer
   chain is exposed via `state.peer_certs_der` / `session.peer_chain()`.
-- **Key-exchange credentials.** `anonymous` (ADH), `psk_identity` and `psk`
-  (hex) live in `model.FingerprintSpec` and `native/engine.go::specJSON`; the
-  engine sets `Config.Anonymous` / `Config.PskIdentity` / `Config.Psk`. PSK
-  suites require both PSK fields. These are additive fields (no ABI bump).
+- **Key-exchange credentials.** `anonymous` (ADH), `psk_identity`/`psk` (hex)
+  and `srp_username`/`srp_password` live in `model.FingerprintSpec` and
+  `native/engine.go::specJSON`; the engine sets `Config.Anonymous` /
+  `Config.PskIdentity` / `Config.Psk` / `Config.SrpUsername` /
+  `Config.SrpPassword` (and injects the RFC 5054 `srp` ClientHello extension
+  from `srp_username`). PSK and SRP suites require both credential fields.
+  These are additive fields (no ABI bump).
 - Fingerprints are always computed **from the bytes the engine emitted/received**
   (`session.fingerprints` / `verify.fingerprints`), never from the spec, except
   `ja4_from_spec` (offline, for range tests) which must agree with the engine
@@ -256,8 +260,11 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - The forked key exchanges are covered by `tests/e2e/test_ffdhe_suites.py`
   (39 DHE/ADH suites, `tests/_dhe_client.py`) and `tests/e2e/test_psk_suites.py`
   (48 PSK suites, `tests/_psk_client.py`), each against `openssl s_server`
-  (`@SECLEVEL=0` for the 64-bit-tag CCM8 suites). Go unit tests live in the
-  fork (`ffdhe_freetls_test.go`, `psk_freetls_test.go`).
+  (`@SECLEVEL=0` for the 64-bit-tag CCM8 suites). SRP is covered at the
+  key-agreement level (`tests/e2e/test_srp_suites.py` + the fork's Go round-trip
+  test) because OpenSSL 3.5.5's deprecated `s_server -srpvfile` path does not
+  complete. Go unit tests live in the fork (`ffdhe_freetls_test.go`,
+  `psk_freetls_test.go`, `srp_freetls_test.go`).
 - Keep the 85% coverage gate green (`make coverage`); if you add code, add tests.
 
 ## Conventions
