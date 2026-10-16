@@ -21,8 +21,10 @@ freetls changes are **new files**, plus a small, documented **patch set**
 
 | File | Purpose |
 |---|---|
-| `internal/handshake/freetls_evp_ccm.go` | TLS 1.3 CCM/CCM_8 packet-protection AEADs backed by OpenSSL EVP, registered behind `-tags freetls_libcrypto` *(P2)* |
-| `internal/handshake/freetls_evp_ccm_test.go` | Go tests for the CCM AEAD and header protection *(P2)* |
+| `internal/handshake/freetls_evp_ccm.go` | TLS 1.3 CCM/CCM_8 packet-protection AEADs backed by OpenSSL EVP, registered behind `-tags freetls_libcrypto` *(Route C)* |
+| `internal/handshake/freetls_evp_ccm_stub.go` | Go-only build: both hooks report "no such suite", so upstream's panics stand *(Route C)* |
+| `internal/handshake/freetls_evp_ccm_test.go` | Go tests for the CCM AEAD and header protection *(Route C)* |
+| `internal/handshake/freetls_evp_ccm_stub_test.go` | Asserts CCM is unavailable (panics) without the libcrypto backend *(Route C)* |
 
 `FORK.md` is also ours.
 

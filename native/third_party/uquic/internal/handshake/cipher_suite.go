@@ -33,6 +33,10 @@ func getCipherSuite(id uint16) cipherSuite {
 	case tls.TLS_AES_256_GCM_SHA384:
 		return cipherSuite{ID: tls.TLS_AES_256_GCM_SHA384, Hash: crypto.SHA384, KeyLen: 32, AEAD: aeadAESGCMTLS13}
 	default:
+		// [freetls] TLS 1.3 CCM suites, supplied by the libcrypto backend.
+		if cs, ok := freetlsExtraCipherSuite(id); ok {
+			return cs
+		}
 		panic(fmt.Sprintf("unknown cypher suite: %d", id))
 	}
 }

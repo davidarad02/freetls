@@ -24,6 +24,8 @@ file (see below). Both are rebasable (see `tools/rebase_utls.sh`).
 | `evp_cgo.go` | cgo `libcrypto` bridge (contexts, error handling) *(M2)* |
 | `freetls_supported.go` | `FreetlsSupportedCipherSuiteIDs()` for safe-mode validation *(M4)* |
 | `evp_freetls_test.go` | Go tests for the EVP AEAD/block bridge *(M2/M3)* |
+| `freetls_evp_aead.go` | `FreetlsNewEVPCCMAEAD()`: exports the EVP CCM AEAD as a `cipher.AEAD` for the QUIC packet-protection layer (uQUIC) *(Route C)* |
+| `freetls_evp_aead_stub.go` | Go-only build's stub: returns an error, so CCM over QUIC is wide-engine only *(Route C)* |
 | `ffdhe_key_agreement.go` | `dhKeyAgreement`: FFDHE (DHE) client key exchange *(P1)* |
 | `ffdhe_dsa.go` | DSA (DSS) signature verification for DHE-DSS *(P1)* |
 | `ffdhe_ciphers.go` | DHE-RSA/DHE-DSS suite registration (Go-native ciphers) *(P1)* |

@@ -9,7 +9,7 @@ GO ?= $(shell command -v go 2>/dev/null || echo "$(HOME)/.local/go/bin/go")
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv native native-go native-dynamic test test-fast test-libcrypto coverage gen update-openssl setup-caps build fmt lint typecheck clean FORCE
+.PHONY: help venv native native-go native-dynamic test test-fast test-libcrypto test-uquic coverage gen update-openssl setup-caps build fmt lint typecheck clean FORCE
 
 # OpenSSL source + build dir (git submodule) for the wide engine.
 OPENSSL_DIR ?= native/third_party/openssl
@@ -91,6 +91,16 @@ FORCE:
 
 test-libcrypto:
 	cd native/third_party/utls && PATH="$(dir $(GO)):$$PATH" CGO_ENABLED=1 "$(GO)" test -tags freetls_libcrypto -run TestEVP ./...
+
+# uQUIC's packet-protection layer, including the freetls EVP/CCM patch. Needs
+# libcrypto on the cgo link line, so it cannot reuse test-libcrypto's flags.
+test-uquic:
+	cd native/third_party/uquic && PATH="$(dir $(GO)):$$PATH" CGO_ENABLED=1 \
+		CGO_CFLAGS="-I$$PWD/../openssl/include" \
+		CGO_LDFLAGS="$$PWD/../openssl/libcrypto.a -ldl -pthread" \
+		"$(GO)" test -tags freetls_libcrypto -run TestFreetlsCCM ./internal/handshake/
+	cd native/third_party/uquic && PATH="$(dir $(GO)):$$PATH" CGO_ENABLED=1 \
+		"$(GO)" test -run TestFreetlsCCM ./internal/handshake/
 
 update-openssl:
 	sh tools/update_openssl.sh $(TAG)

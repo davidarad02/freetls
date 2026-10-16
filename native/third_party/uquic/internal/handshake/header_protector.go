@@ -33,6 +33,10 @@ func newHeaderProtector(suite cipherSuite, trafficSecret []byte, isLongHeader bo
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
 		return newChaChaHeaderProtector(suite, trafficSecret, isLongHeader, hkdfLabel)
 	default:
+		// [freetls] CCM suites use AES-ECB header protection, like GCM.
+		if hp, ok := freetlsExtraHeaderProtector(suite, trafficSecret, isLongHeader, hkdfLabel); ok {
+			return hp
+		}
 		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
 }

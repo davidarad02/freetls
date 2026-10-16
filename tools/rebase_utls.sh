@@ -17,7 +17,7 @@ FORK="$NATIVE/third_party/utls"
 # Files that are ours (not from upstream) and must survive a rebase.
 OURS="FORK.md freetls_buildtag.go freetls_buildtag_libcrypto.go \
 freetls_supported.go cipher_evp_register.go aead_evp.go block_evp.go \
-evp_cgo.go evp_freetls_test.go \
+evp_cgo.go evp_freetls_test.go freetls_evp_aead.go freetls_evp_aead_stub.go \
 ffdhe_key_agreement.go ffdhe_dsa.go ffdhe_ciphers.go ffdhe_ciphers_evp.go \
 ffdhe_freetls_test.go \
 psk_key_agreement.go psk_ciphers.go psk_ciphers_evp.go psk_freetls_test.go \
