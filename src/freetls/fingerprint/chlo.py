@@ -15,6 +15,12 @@ from .parse import is_grease, parse_client_hello
 
 __all__ = ["chlo_json_from_raw"]
 
+# quic_transport_parameters. uTLS resolves extension 57 by name to
+# QUICTransportParametersExtension, which does not implement TLSExtensionJSON,
+# so a QUIC ClientHello cannot round-trip through a chlo_json document at all
+# (its AllowUnknownExt fallback only fires when the ID is unknown, not here).
+_QUIC_TRANSPORT_PARAMETERS = 0x0039
+
 _EXT_NAME = {
     0x0000: "server_name",
     0x0005: "status_request",
@@ -123,6 +129,12 @@ def chlo_json_from_raw(raw: bytes) -> str:
     for e in ch.extensions:
         if is_grease(e.type):
             continue
+        if e.type == _QUIC_TRANSPORT_PARAMETERS:
+            raise SpecError(
+                "quic_transport_parameters (0x0039) has no uTLS ClientHelloSpec "
+                "JSON representation (uTLS resolves it to a non-JSON extension); "
+                "use the typed QUIC transport-parameter model instead of chlo_json"
+            )
         name = _EXT_NAME.get(e.type)
         if name is None:
             raise SpecError(f"cannot represent extension 0x{e.type:04x}")

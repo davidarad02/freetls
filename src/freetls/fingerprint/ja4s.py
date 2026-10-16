@@ -27,8 +27,15 @@ def _version_string(sh: ServerHello) -> str:
     return _VERSION_MAP.get(sh.legacy_version, "00")
 
 
-def to_ja4s(sh: ServerHello) -> dict:
-    ptype = "t"
+def to_ja4s(sh: ServerHello, *, transport: str = "t") -> dict:
+    """Compute JA4S from a parsed ServerHello.
+
+    ``transport`` is the leading character: ``"t"`` for TLS over TCP (default)
+    or ``"q"`` for QUIC. As with JA4, only the prefix differs.
+    """
+    if transport not in ("t", "q"):
+        raise ValueError(f"transport must be 't' or 'q', got {transport!r}")
+    ptype = transport
     version = _version_string(sh)
     ext_types = sh.ext_types
     ext_count = min(len(ext_types), 99)
@@ -48,5 +55,5 @@ def to_ja4s(sh: ServerHello) -> dict:
     }
 
 
-def ja4s_from_bytes(raw_server_hello: bytes) -> dict:
-    return to_ja4s(parse_server_hello(raw_server_hello))
+def ja4s_from_bytes(raw_server_hello: bytes, *, transport: str = "t") -> dict:
+    return to_ja4s(parse_server_hello(raw_server_hello), transport=transport)

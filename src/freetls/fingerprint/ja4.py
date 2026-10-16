@@ -45,9 +45,16 @@ def _sha12(text: str) -> str:
     return sha256(text.encode("utf8")).hexdigest()[:12]
 
 
-def to_ja4(ch: ClientHello) -> dict:
-    """Compute JA4 and its raw variants from a parsed ClientHello."""
-    ptype = "t"
+def to_ja4(ch: ClientHello, *, transport: str = "t") -> dict:
+    """Compute JA4 and its raw variants from a parsed ClientHello.
+
+    ``transport`` is the leading fingerprint character: ``"t"`` for TLS over
+    TCP (the default) or ``"q"`` for QUIC. Per the FoxIO spec the rest of the
+    algorithm is identical; only the prefix differs.
+    """
+    if transport not in ("t", "q"):
+        raise ValueError(f"transport must be 't' or 'q', got {transport!r}")
+    ptype = transport
     version = _version_string(ch)
     sni = "d" if ch.has_sni else "i"
     alpn = first_last_alpn(ch.alpn_list)
@@ -95,8 +102,8 @@ def to_ja4(ch: ClientHello) -> dict:
     }
 
 
-def ja4_from_bytes(raw_client_hello: bytes) -> dict:
-    return to_ja4(parse_client_hello(raw_client_hello))
+def ja4_from_bytes(raw_client_hello: bytes, *, transport: str = "t") -> dict:
+    return to_ja4(parse_client_hello(raw_client_hello), transport=transport)
 
 
 # Extension kind -> wire type id (for computing JA4 from a spec offline).
@@ -119,6 +126,7 @@ _KIND_ID = {
     "pre_shared_key": 0x0029,
     "padding": 0x0015,
     "application_settings": 0x4469,
+    "quic_transport_parameters": 0x0039,
 }
 
 
@@ -160,5 +168,5 @@ def spec_to_client_hello(spec):
     return ch
 
 
-def ja4_from_spec(spec) -> dict:
-    return to_ja4(spec_to_client_hello(spec))
+def ja4_from_spec(spec, *, transport: str = "t") -> dict:
+    return to_ja4(spec_to_client_hello(spec), transport=transport)
