@@ -95,6 +95,27 @@ def test_httpx_transport_via_http_proxy(tls_server_13):
     assert t.last_session.ja4.startswith("t13")
 
 
+def test_websocket_permessage_deflate(certs):
+    from proxies import WSEchoServer
+
+    from freetls.transport import websocket
+
+    cert, key = certs
+    with WSEchoServer(cert, key) as server:
+        s = TLSSession(modes.baseline_spec(server_name="localhost", alpn=["http/1.1"]))
+        s.connect("127.0.0.1", server.port, server_hostname="localhost")
+        ws = websocket.connect(s, "localhost", "/")
+        try:
+            assert ws._deflate is not None  # RFC 7692 negotiated
+            payload = "abc" * 5000
+            ws.send(payload)
+            assert ws.recv() == payload
+            ws.send_binary(b"\x00" * 4000)
+            assert ws.recv() == b"\x00" * 4000
+        finally:
+            s.close()
+
+
 def test_websocket_echo(certs):
     from proxies import WSEchoServer
 

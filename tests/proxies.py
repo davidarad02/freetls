@@ -11,6 +11,7 @@ import socket
 import ssl
 import struct
 import threading
+import zlib
 
 _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -188,21 +189,31 @@ class WSEchoServer:
             return
         try:
             request = _read_headers(conn)
-            key = ""
-            for line in request.decode("latin-1").split("\r\n"):
-                if line.lower().startswith("sec-websocket-key:"):
-                    key = line.split(":", 1)[1].strip()
+            headers = {}
+            for line in request.decode("latin-1").split("\r\n")[1:]:
+                name, _, value = line.partition(":")
+                headers[name.strip().lower()] = value.strip()
+            key = headers.get("sec-websocket-key", "")
             accept = base64.b64encode(hashlib.sha1((key + _GUID).encode()).digest()).decode()
-            conn.sendall(
-                (
-                    "HTTP/1.1 101 Switching Protocols\r\n"
-                    "Upgrade: websocket\r\n"
-                    "Connection: Upgrade\r\n"
-                    f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
-                ).encode()
+            deflate = "permessage-deflate" in headers.get("sec-websocket-extensions", "")
+            resp = (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n"
+            )
+            if deflate:
+                resp += "Sec-WebSocket-Extensions: permessage-deflate\r\n"
+            conn.sendall((resp + "\r\n").encode())
+            dec = zlib.decompressobj(-15) if deflate else None
+            comp = (
+                zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                if deflate
+                else None
             )
             while True:
                 header = self._recv_exact(conn, 2)
+                rsv1 = bool(header[0] & 0x40)
                 opcode = header[0] & 0x0F
                 length = header[1] & 0x7F
                 if length == 126:
@@ -215,13 +226,22 @@ class WSEchoServer:
                     conn.sendall(b"\x88\x00")
                     break
                 unmasked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-                out = bytes([0x80 | opcode])
-                n = len(unmasked)
+                if rsv1 and dec is not None:
+                    unmasked = dec.decompress(unmasked + b"\x00\x00\xff\xff")
+                out_payload = unmasked
+                out_rsv1 = 0
+                if deflate:
+                    out_payload = comp.compress(unmasked) + comp.flush(zlib.Z_SYNC_FLUSH)
+                    if out_payload.endswith(b"\x00\x00\xff\xff"):
+                        out_payload = out_payload[:-4]
+                    out_rsv1 = 0x40
+                out = bytes([0x80 | out_rsv1 | opcode])
+                n = len(out_payload)
                 if n < 126:
                     out += bytes([n])
                 else:
                     out += b"\x7e" + struct.pack(">H", n)
-                conn.sendall(out + unmasked)
+                conn.sendall(out + out_payload)
         except OSError:
             pass
         finally:
