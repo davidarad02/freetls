@@ -70,8 +70,8 @@ def _go_lib_filename() -> str:
 class Engine(enum.Enum):
     """A built-in engine variant.
 
-    ``WIDE`` is the default (Go + a static OpenSSL ``libcrypto`` backend, 51
-    completable cipher suites); ``GO`` is the Go-only engine (27 suites).
+    ``WIDE`` is the default (Go + a static OpenSSL ``libcrypto`` backend, 144
+    completable cipher suites); ``GO`` is the Go-only engine (78 suites).
     """
 
     WIDE = "wide"

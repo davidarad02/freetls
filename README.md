@@ -12,7 +12,8 @@ validation, Hello Retry Request).
 
 Highlights:
 
-- **JA4** control to a very high degree, with **JA3** and **JA4S** reporting.
+- **JA4** control to a very high degree, with **JA3**, **JA3N**, **JA4S**,
+  **JA4X**, **JA4H** and the **Akamai HTTP/2** fingerprint reporting.
 - Three modes: **Specific**, **Partially-random**, **True-random**.
 - Real **TLS 1.0–1.3** handshakes (completed where the server allows); no SSLv3.
 - A catalog of **248 common-JA4 profiles** derived from uTLS's real, current
@@ -20,9 +21,10 @@ Highlights:
 - Drop-in **requests**, **httpx** (sync + async) and **aiohttp** transports;
   requests and httpx select **HTTP/2 automatically via ALPN** (aiohttp is
   HTTP/1.1-only and offers a safe ALPN).
-- An `ssl.SSLContext`-style `wrap_socket()` API.
+- An `ssl.SSLContext`-style `wrap_socket()` API, **Happy Eyeballs** (RFC 8305)
+  connect, and **NSS key-log** (`SSLKEYLOGFILE`) export.
 - Go-side **HTTP/2** with controllable SETTINGS / WINDOW_UPDATE / pseudo-header
-  order.
+  order; multi-request connections with flow control.
 - **HTTP/3 / QUIC**: a spoofable QUIC Initial, JA4q/JA4Sq, a concurrent
   `QUICSession`, RFC 9297 datagrams, and opt-in HTTP/3 in the transports.
 - **Self-verification**: JA4/JA3/JA4S are recomputed from the exact bytes the
@@ -213,10 +215,10 @@ surface that exists — `connect`, `sendall`/`send`, `recv`, `makefile`,
 not a drop-in `ssl.SSLSocket`: it is **blocking-only**
 (`setblocking(False)` raises), `pending()` always returns `0`, and there is no
 memory BIO, no `SSLObject`, no `SSLContext.set_*` callback surface
-(`set_servername_callback`, `set_ciphers`, `set_alpn_protocols`, …), no
-`SSLKEYLOGFILE` support, and no non-blocking handshake resumption. Porting
-existing `ssl` code requires adapting the I/O loop. See
-[Limitations](#limitations) for the full list.
+(`set_servername_callback`, `set_ciphers`, `set_alpn_protocols`, …) and no
+non-blocking handshake resumption. (Key-log export is available via
+`FingerprintSpec.keylog`.) Porting existing `ssl` code requires adapting the I/O
+loop. See [Limitations](#limitations) for the full list.
 
 ---
 
@@ -903,14 +905,20 @@ fp = verify.probe(spec, "127.0.0.1", port, server_hostname="h")  # connect + ret
 verify.verify_peer_with_python(session, ca_pem, "example.com")   # cryptography parity
 ```
 
-`session.fingerprints` (and `session.ja4` / `.ja3` / `.ja4s`) are always computed
-from the bytes the engine emitted (`client_hello`) and received (`server_hello`),
-never from the spec. You can inspect those raw handshake bytes yourself:
+`session.fingerprints` (and `session.ja4` / `.ja3` / `.ja3n` / `.ja4s`) are always
+computed from the bytes the engine emitted (`client_hello`) and received
+(`server_hello`), never from the spec. You can inspect those raw handshake bytes
+yourself:
 
 ```python
 session.client_hello    # bytes: the exact ClientHello handshake message sent
 session.server_hello    # bytes: the ServerHello received (for JA4S)
 ```
+
+HTTP/2 adds `resp["akamai_h2"]` (the `1:65536;2:0;…|…|…|m,a,s,p` fingerprint) and
+`resp["ja4h"]`; the transports expose `last_ja4h`. To decrypt a session in
+Wireshark, set `FingerprintSpec.keylog = "/path/keys.log"` (NSS `SSLKEYLOGFILE`
+format; security-sensitive, off by default).
 
 ---
 
@@ -1051,7 +1059,8 @@ verify.verify_peer_with_python(session, cafile, server_hostname=None)
 
 ### Fingerprint helpers — `freetls.fingerprint`
 
-`ja4_from_bytes(raw)`, `ja3_from_bytes(raw)`, `ja4s_from_bytes(raw)`,
+`ja4_from_bytes(raw)`, `ja3_from_bytes(raw)`, `ja3n_from_bytes(raw)`,
+`ja4s_from_bytes(raw)`, `akamai_h2_fingerprint(settings, window_update, order)`,
 `ja4_from_spec(spec)` (offline), `first_last_alpn(value)`, plus the raw parser.
 The JA4+ report-only calculators are exported both here and at the top level:
 `ja4x` / `ja4x_from_cert`, `ja4t` / `ja4ts`, `ja4l`, `ja4h` / `ja4h_from_request`.
@@ -1376,12 +1385,6 @@ around rather than discovered in production.
   requests/urllib3 (H1) and aiohttp (H1) stream a request body. The H2 path is
   additionally bounded by the 16 KB single-frame limitation. See
   [Streaming & content decoding](#streaming--content-decoding).
-- **No TLS key-log callback (`SSLKEYLOGFILE`).** The engine does not expose
-  per-session traffic secrets, so freetls sessions cannot be decrypted in
-  Wireshark/`tshark` or fed to a TLS-analysis pipeline the way Python `ssl` and
-  browsers allow. This is a notable gap for a wire-fidelity library: you can
-  verify the ClientHello on the wire (see the pcap tests) but not decrypt the
-  rest of the session.
 - **`ssl`-API parity is partial.** `TLSContext`/`TLSSession` are `ssl`-*like*
   rather than `ssl`-*compatible*: blocking-only I/O, `pending()` always `0`, no
   memory BIO or `SSLObject`, no `SSLContext` callback surface

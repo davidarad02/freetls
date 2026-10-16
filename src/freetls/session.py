@@ -70,7 +70,9 @@ class TLSSession:
         if timeout is not None:
             # The connect timeout also covers the TLS handshake.
             self.spec.timeout_ms = max(1, int(timeout * 1000))
-        sock = socket.create_connection((host, port), timeout=timeout)
+        from .net import happy_eyeballs
+
+        sock = happy_eyeballs(host, port, timeout)
         try:
             return self.wrap_socket(sock, server_hostname=server_hostname or host)
         except (HandshakeError, SpecError):
