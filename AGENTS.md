@@ -9,7 +9,10 @@ fingerprint (plus JA3 and JA4S). The TLS handshake is done by a Go + uTLS
 engine compiled to a native shared library (`libfreetls.so`) and loaded from
 Python via `cffi`. Only the ClientHello is overridden; all cryptography is Go
 `crypto/tls`. There is no monorepo — one Python package (`src/freetls`) plus a
-Go module (`native/`), and no git repo/CI in the worktree.
+Go module (`native/`). It is a git repo (`origin` on GitHub), but there is **no
+CI** — no `.github/` workflow or equivalent — so `make test` / `make coverage` /
+`make lint` / `make typecheck` are run by hand. There is also no `LICENSE` or
+`CHANGELOG` file.
 
 ## Route B — single engine with a libcrypto (OpenSSL EVP) backend
 

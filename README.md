@@ -203,6 +203,18 @@ with ctx.wrap_socket(sock, server_hostname="example.com") as tls:
     print(tls.ja4)
 ```
 
+`TLSContext` / `TLSSession` are **`ssl`-like, not `ssl`-compatible**. The
+surface that exists — `connect`, `sendall`/`send`, `recv`, `makefile`,
+`settimeout`, `close`, `selected_alpn_protocol`, `version`, `cipher`,
+`getpeercert`, `wrap_socket` — behaves like its `ssl` counterpart, but this is
+not a drop-in `ssl.SSLSocket`: it is **blocking-only**
+(`setblocking(False)` raises), `pending()` always returns `0`, and there is no
+memory BIO, no `SSLObject`, no `SSLContext.set_*` callback surface
+(`set_servername_callback`, `set_ciphers`, `set_alpn_protocols`, …), no
+`SSLKEYLOGFILE` support, and no non-blocking handshake resumption. Porting
+existing `ssl` code requires adapting the I/O loop. See
+[Limitations](#limitations) for the full list.
+
 ---
 
 ## Choosing a fingerprint
@@ -525,10 +537,11 @@ The default is **unsafe**, for backward compatibility.
 ## Wide cipher support (libcrypto)
 
 The **default** engine is the **wide** engine: it completes the suites Go
-`crypto/tls` implements (plus uTLS's legacy ChaCha20) *and* links an OpenSSL
-`libcrypto` (EVP) backend that adds 24 suites — ARIA-GCM, AES-CCM / CCM_8,
-Camellia-CBC, and TLS 1.3 CCM — for **51** completable suites. The Go-only
-engine (27 suites) is built as an alternate:
+`crypto/tls` implements (plus uTLS's legacy ChaCha20, the forked finite-field
+DHE / PSK / SRP families) *and* links an OpenSSL `libcrypto` (EVP) backend that
+adds the ARIA-GCM, AES-CCM / CCM_8, Camellia-CBC and TLS 1.3 CCM families — 66
+suites the Go-only engine does not offer — for **144** completable suites. The
+Go-only engine (**78** suites) is built as an alternate:
 
 ```bash
 make native          # default: WIDE engine, static libcrypto (symbol-hidden)
@@ -621,6 +634,35 @@ r = s.get("https://example.com/")
 print(adapter.last_session.selected_alpn_protocol())   # "h2" when negotiated
 ```
 
+### HTTP/2 limitations
+
+The H2 client is purpose-built to make the *fingerprint* controllable, not to be
+a general HTTP/2 stack. The current gaps:
+
+- **No frame splitting (known limitation, can break large requests).** The
+  request HEADERS block and the request body are each written as a **single
+  frame** (`EndHeaders`/`EndStream` set immediately) with no splitting at the
+  peer's `SETTINGS_MAX_FRAME_SIZE` (default 16 384 bytes). A request body or
+  header block larger than that emits an oversized frame, which a strict server
+  rejects with a `FRAME_SIZE_ERROR` connection error. Keep H2 request bodies
+  under 16 KB until this is fixed. (Inbound frames *are* handled correctly —
+  the reader reassembles `CONTINUATION`.)
+- **No HPACK encoding control.** Request headers are encoded with a default
+  `hpack.Encoder` (4 KiB dynamic table, Huffman on). HPACK representation
+  choices are themselves a fingerprint surface and are not configurable; only
+  the SETTINGS values, the connection `WINDOW_UPDATE`, and pseudo-header order
+  are.
+- **One stream per connection, no multiplexing.** `h2_request` opens stream 1,
+  writes the request, and reads frames until that stream ends; there is no
+  concurrent-stream support. Request concurrency therefore comes from opening
+  more connections, not from multiplexing.
+- **No priority, no server push.** Priority signalling (RFC 7540 §5.3) is never
+  sent; `PUSH_PROMISE` and `RST_STREAM` frames are ignored by the read loop.
+  Server push is disabled by default (`SETTINGS_ENABLE_PUSH=0`) and is not
+  handled even if you re-enable it through `h2_settings`.
+- **aiohttp cannot speak HTTP/2 at all** (see below) — it is HTTP/1.1-only.
+- **No HTTP/3 / QUIC** (see [Limitations](#limitations)).
+
 ## Streaming & content decoding
 
 The httpx transports stream response bodies (HTTP/1.1 chunk-by-chunk, HTTP/2 as
@@ -643,6 +685,28 @@ with httpx.Client(transport=t) as c:
 `gzip`, `deflate`, `brotli` and `zstd` bodies are decoded transparently
 (`brotli`/`zstd` require the optional `freetls[content]` extra; httpx also
 decodes them itself when its extras are installed).
+
+**Response streaming is incremental; request-body streaming is not.** Response
+bodies arrive incrementally in every transport (H1 chunk-by-chunk, H2 as DATA
+frames as they are read, aiohttp fed to the loop as data lands). Request bodies
+are a different story — the engine's `h2_request` and `write` take a **complete
+buffer**:
+
+- **HTTP/2:** the body is coerced with `bytes(body)` before the call, so a
+  generator/iterator body is **not supported** on the H2 path, and any body is
+  buffered in full. Combined with the frame-splitting gap above, H2 request
+  bodies are also capped at the 16 KB single-frame budget.
+- **httpx (H1 and H2):** the transport calls `request.read()`, so a streaming
+  `content=<iterator>` body is **materialised in memory** before it is sent.
+- **requests / urllib3 (H1 only):** an iterable body is handed to urllib3, which
+  can send it with chunked transfer encoding; this is the one path that streams
+  a request body.
+- **aiohttp (H1 only):** the connector's transport `write()` forwards whatever
+  aiohttp's payload writer hands it, so chunked/streamed request bodies are
+  passed through as they are produced.
+
+For large uploads prefer HTTP/1.1, or stream explicitly through the raw
+`TLSSession.write`.
 
 ### Server-Sent Events
 
@@ -807,7 +871,7 @@ session.server_hello    # bytes: the ServerHello received (for JA4S)
 | `freetls.Cipher`, `freetls.ExtensionType`, `freetls.SignatureScheme`, `freetls.NamedGroup` | IANA `IntEnum` constants (int-compatible; names/ints interchangeable) |
 | `freetls.modes` | `baseline_spec`, `specific`, `partial_random`, `true_random` |
 | `freetls.verify` | self-verification helpers |
-| `freetls.JA4Adapter` / `freetls.engine_version()` | adapter / engine version string |
+| `freetls.engine_version()` | engine version string |
 | `freetls.ja4_from_bytes`, `ja3_from_bytes`, `ja4s_from_bytes` | compute from raw handshake bytes |
 | `freetls.parse_client_hello`, `parse_server_hello` | parse handshake bytes |
 | `freetls.TLS10/11/12/13` | version constants |
@@ -1056,7 +1120,7 @@ The native engine keeps a mutex-guarded session registry: all C entrypoints are
 safe to call from multiple threads, sessions are independent, and every
 entrypoint wraps its body in `recover()` so a Go panic becomes a Python error
 instead of aborting the host process. The C surface carries an ABI version
-(`engine.abi_version()`, currently `1`); the binding refuses to load an engine
+(`engine.abi_version()`, currently `2`); the binding refuses to load an engine
 whose major version does not match, so a stale `libfreetls.so` fails loudly.
 
 A single `TLSSession` is **not** internally synchronised — use one session per
@@ -1188,5 +1252,53 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
   suites, ``tests/e2e/test_all_suites.py`` negotiates **129** end-to-end (with an
   application-data round trip) and skips the other 15 with a concrete reason
   (RC4/3DES/TLS 1.3 CCM/legacy-ChaCha not in OpenSSL 3.5.5, plus SRP).
-- Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
-  system on those platforms; this checkout is exercised on Linux/CPython 3.14.
+- **Cross-platform builds are not turnkey.** The OpenSSL `Configure` target is
+  hardcoded to `linux-x86_64` in both `Makefile` (`OPENSSL_ARGS`) and `setup.py`,
+  so building the **wide** engine on macOS/Windows/other architectures requires
+  changing that target (the loader already looks for `libfreetls.dylib` /
+  `freetls.dll`, but nothing produces them). The **Go-only** engine
+  (`make native-go`, `FREETLS_NO_OPENSSL=1`) is portable. This checkout is
+  exercised on Linux/CPython 3.14.
+
+### Known gaps
+
+These are deliberately unimplemented areas, documented so they can be planned
+around rather than discovered in production.
+
+- **HTTP/3 and QUIC are not implemented.** freetls is TCP-only: there is no QUIC
+  transport, no QUIC Initial-packet / transport-parameter fingerprinting, no
+  TLS-1.3-over-QUIC handshake, no 0-RTT, and no `h3`/`h3-29` ALPN handling. The
+  HTTP/2 and HTTP/1.1 transports are the only ones. HTTP/3 is out of scope for
+  the current design (the engine is a TCP socket + TLS record layer), not merely
+  untested.
+- **HTTP/2 coverage is fingerprint-shaped, not production-shaped.** See
+  [HTTP/2 limitations](#http2-limitations) for the detail: single-frame
+  HEADERS/DATA writes with no `MAX_FRAME_SIZE` splitting (a **known limitation**
+  that breaks request bodies/header blocks over 16 KB), no HPACK encoding
+  control, one stream per connection with no multiplexing, no priority or
+  server-push handling, and no HTTP/2 at all from the aiohttp connector.
+- **Request bodies are not streamed on the HTTP/2 path.** Response bodies stream
+  incrementally everywhere, but the engine's `h2_request`/`write` take a complete
+  buffer, so the H2 path buffers the whole body (and rejects generator bodies via
+  `bytes(body)`); httpx materialises `content=<iterator>` on both H1 and H2. Only
+  requests/urllib3 (H1) and aiohttp (H1) stream a request body. The H2 path is
+  additionally bounded by the 16 KB single-frame limitation. See
+  [Streaming & content decoding](#streaming--content-decoding).
+- **No TLS key-log callback (`SSLKEYLOGFILE`).** The engine does not expose
+  per-session traffic secrets, so freetls sessions cannot be decrypted in
+  Wireshark/`tshark` or fed to a TLS-analysis pipeline the way Python `ssl` and
+  browsers allow. This is a notable gap for a wire-fidelity library: you can
+  verify the ClientHello on the wire (see the pcap tests) but not decrypt the
+  rest of the session.
+- **`ssl`-API parity is partial.** `TLSContext`/`TLSSession` are `ssl`-*like*
+  rather than `ssl`-*compatible*: blocking-only I/O, `pending()` always `0`, no
+  memory BIO or `SSLObject`, no `SSLContext` callback surface
+  (`set_servername_callback`/`set_ciphers`/`set_alpn_protocols`/…), and no
+  non-blocking handshake. Existing `ssl`-based code needs its I/O loop adapted.
+- **No certificate revocation checking.** `status_request` captures the peer's
+  OCSP response (`state.ocsp_response_b64`) and SCTs, but freetls does not
+  validate OCSP/CRL or perform stapling checks; verification is chain + hostname
+  + optional pinning only.
+- **Session state is process-local.** TLS 1.2/1.3 resumption goes through the
+  engine's in-process shared cache; there is no import/export of session tickets
+  or `SSL_SESSION` blobs, so resumption state cannot be persisted or replayed.

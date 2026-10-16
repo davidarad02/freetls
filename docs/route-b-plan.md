@@ -7,6 +7,18 @@ work.
 
 Related: `AGENTS.md` (architecture/wiring facts), `README.md`.
 
+> **Post-plan extensions (supersede the scope below).** After this plan was
+> written, three previously out-of-scope families were implemented in the forked
+> uTLS engine (not via libcrypto) and shipped: **P3** finite-field DHE
+> (`DHE-RSA`/`DHE-DSS`/`ADH`, `ffdhe_*.go`), **P4** anonymous suites (ADH), and
+> **P5** the TLS 1.2 PSK family (`PSK`/`ECDHE-PSK`/`DHE-PSK`/`RSA-PSK`,
+> `psk_*.go`) plus **SRP** (RFC 5054, `srp*.go`). The wide engine therefore
+> completes **144** suites and the Go-only alternate **78** (not 51/27), and the
+> safe-mode catalog pass rate is **95/220** (not 75/220). Where this document
+> still says "out of scope" for P3/P4/P5, §0's post-plan note and `AGENTS.md`
+> are authoritative. GOST/SEED, native ECH/ALPS/trust_anchors semantics, and
+> HTTP/3 remain out of scope.
+
 ## 0. Status and deviations (measured against OpenSSL 3.5.5)
 
 Two assumptions in the original plan turned out to be wrong; the scope is
@@ -23,8 +35,10 @@ adjusted to match what OpenSSL 3.5.5 actually implements (per D1):
   negotiates it**, so there is no end-to-end handshake test.
 
 Resulting scope: **P1 = 14 TLS 1.0–1.2 suites** (6 ARIA-GCM + 8 AES-CCM/CCM_8)
-plus **2 TLS 1.3 CCM**; **P2 = 8 Camellia-CBC suites**. Go native 25 + 24 = **49
-completable suites**.
+plus **2 TLS 1.3 CCM**; **P2 = 8 Camellia-CBC suites**. At the time of writing
+that was Go native 25 + 24 = **49 completable suites**; after the post-plan P3/
+P4/P5 work (see the note above) the measured totals are **144** (wide) and
+**78** (Go-only).
 
 ### Implemented so far
 - `native/third_party/utls/` fork + `replace` + `tools/rebase_utls.sh` +
@@ -42,10 +56,12 @@ completable suites**.
   `freetls/safety.py` validates the effective hello (spec/preset/chlo_json)
   against the whitelist; `modes.safe_random` (and `safe=` on the random modes)
   draws only from backed ciphers + whitelisted extensions. Catalog: **75/220**
-  profiles pass (unchanged with the wide engine, since the failures are ECH /
-  trust_anchors / generic extensions, not ciphers).
-- The wide engine completes **51** cipher suites (25 Go + 2 legacy ChaCha20 +
-  24 Route B), up from 27.
+  profiles passed at the time of writing (the failures were ECH / trust_anchors
+  / generic extensions, not ciphers); after the post-plan P3/P4/P5 additions the
+  measured rate is **95/220**.
+- The wide engine completed **51** cipher suites (25 Go + 2 legacy ChaCha20 +
+  24 Route B) at the time of writing, up from 27. After the post-plan P3/P4/P5
+  work it is **144** (Go-only **78**).
 - Packaging (M5): the OpenSSL 3.5.5 source is a git submodule at
   `native/third_party/openssl` (shallow); `make native` builds it as a static PIC
   `libcrypto.a` and links it into `libfreetls.so` with
@@ -99,7 +115,7 @@ that verifies a spec is fully backed before use.
 | # | Decision |
 |---|---|
 | D1 | Target = **OpenSSL 3.5.5's implemented set** (92 distinct suites: 89 TLS 1.0–1.2 + 3 TLS 1.3). Unassigned/never-implemented IANA entries are out of scope. |
-| D2 | Crypto widened via **libcrypto (EVP)** only — **P1 (AEAD extras) + P2 (CBC extras) + TLS 1.3 CCM**. No P3 (DHE/DSS), no P4 (anon), no P5 (PSK/SRP/GOST). |
+| D2 | Crypto widened via **libcrypto (EVP)** only — **P1 (AEAD extras) + P2 (CBC extras) + TLS 1.3 CCM**. No P3 (DHE/DSS), no P4 (anon), no P5 (PSK/SRP/GOST) *at plan time*; **P3/P4/P5 were later implemented in the uTLS fork (not libcrypto)** — see the post-plan note in §0. GOST remains out of scope. |
 | D3 | CBC block ciphers use **EVP `cipher.Block` wrappers** (per-block cgo), reusing Go's CBC/MAC/record logic. |
 | D4 | libcrypto is **statically linked** into `libfreetls.so`. |
 | D5 | The uTLS fork lives **in-module** at `native/third_party/utls` via a `replace` directive. |
@@ -239,9 +255,22 @@ The unsafe extension default was also corrected from 8 / 40 to `⌊47/2⌋ = 23`
 the Go-only engine; 800 on the wide engine.
 
 ### 6.5 What safe mode loses (measured)
-Against the current catalog: **75 / 220 profiles pass; 145 fail** (50 unsupported
-ciphers; 15 ECH; 10 trust_anchors; the rest preset-specific ids such as
-`0x7550`, `0x0022` delegated_credentials, `0x3374`, `0x754f`).
+At plan time: **75 / 220 profiles pass; 145 fail** (50 unsupported ciphers;
+15 ECH; 10 trust_anchors; the rest preset-specific ids such as `0x7550`,
+`0x0022` delegated_credentials, `0x3374`, `0x754f`).
+
+**Re-measured after the post-plan P3/P4/P5 additions: 95 / 220 pass; 125 fail**
+(75 extensions-only, 30 ciphers-only, 20 both). Unbacked extension ids:
+`0xfe0d` (ECH, 40 profiles), `0x0022` (30), `0x7550` (20), `0x3374` (20),
+`0x754f` (10), `0xca34` (trust_anchors, 10). Unbacked ciphers: `0x003d` (35),
+`0xc008` (35), `0xc024` (25), `0xc028` (25), `0x0004` (RC4, 10). The pass rate
+rose because the fork now backs the DHE/PSK/SRP ciphers those presets offer.
+
+*(Table below is the plan-time calculation, when the backed pools were 27
+(Go-only) and 51 (wide). The pools are now **78** and **144**, so every
+`C(N,k)` term is correspondingly larger; the qualitative conclusion — the wide
+engine lifts the safe pool near the 2^48 cipher-hash cap — is unchanged and
+stronger.)*
 
 | mode | cipher-hash (b) | ext factor | total S | n₅₀ | P(collision @10k) |
 |---|---|---|---|---|---|
@@ -254,7 +283,8 @@ engine, i.e. near the 2^48 cipher-hash cap.)
 
 **Not lost in safe mode:** GREASE control, padding, ALPS, cert compression,
 record_size_limit, OCSP/SCT, resumption/PSK, PQ groups, extension order control,
-all transports/cert-suite/H2/timeouts, and the 75 backed profiles.
+all transports/cert-suite/H2/timeouts, and the backed profiles (75 at plan time,
+**95** re-measured).
 
 ---
 
@@ -316,9 +346,14 @@ all transports/cert-suite/H2/timeouts, and the 75 backed profiles.
 ---
 
 ## 10. Out of scope
-P3 (DHE/DSS), P4 (anonymous suites), P5 (PSK/SRP/GOST/SEED); Windows/macOS;
-arbitrary extension-order / GREASE control changes (Gaps 1–2 unaffected for
-JA4); native ECH/ALPS/trust_anchors/record_size_limit semantics; HTTP/3.
+**Superseded in part** — P3 (DHE/DSS), P4 (anonymous suites) and the non-GOST
+parts of P5 (PSK/SRP) have since been implemented in the uTLS fork; see the
+post-plan note in §0 and `AGENTS.md`. Still out of scope: **GOST/SEED**;
+Windows/macOS build targets (the OpenSSL `Configure` target is hardcoded to
+`linux-x86_64`); arbitrary extension-order / GREASE control changes (Gaps 1–2
+unaffected for JA4); native ECH/ALPS/trust_anchors/record_size_limit semantics;
+**HTTP/3/QUIC**; TLS key-log (`SSLKEYLOGFILE`) export; certificate revocation
+checking; session-ticket import/export.
 
 ---
 
@@ -346,11 +381,14 @@ JA4); native ECH/ALPS/trust_anchors/record_size_limit semantics; HTTP/3.
 
 ## 12. Appendix — coverage math
 
+*Plan-time figures; the shipped engine offers **144** suites (wide) / **78**
+(Go-only). See §0's post-plan note.*
+
 - OpenSSL 3.5.5 families: RSA 19, DH 39 (DHE-RSA 17 / DHE-DSS 12 / ADH 10),
   ECDH 31 (ECDSA 16 / RSA 12 / anon 3), TLS 1.3 3 → **92 total**.
-- Go native = **25**; P1+P2 target ≈ **47** (ECDHE non-anon 28 + RSA 19).
+- Go native = **25** (pre-fork); P1+P2 target ≈ **47** (ECDHE non-anon 28 + RSA 19).
   Actual P1 (after dropping Camellia-GCM) = **16** (14 TLS 1.2 + 2 TLS 1.3 CCM);
-  Go 25 + 16 = **41** completable suites.
+  Go 25 + 16 = **41** completable suites (plan-time; shipped: 144/78).
 - Cipher hash saturates at 2^48 only for N≥76 (k=14) / N=92 (k=12); P1+P2 alone
   tops out at C(47,23)=2^43.9.
 - Full S = min(C(N,k),2^48) × min(C(M,j),2^48), M = 47 safe padding ids.
