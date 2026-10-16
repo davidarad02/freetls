@@ -41,6 +41,9 @@ char *freetls_h2_request(long long, const char *);
 char *freetls_supported_ciphers(void);
 char *freetls_supported_extensions(void);
 char *freetls_spec_raw(const char *);
+int freetls_quic_handshake(long long, int, const char *, const char *, int);
+char *freetls_quic_id_list(void);
+char *freetls_quic_id_raw(const char *, int, const char *);
 """
 
 _LIB_NAMES = {
@@ -251,7 +254,7 @@ def engine_context(engine: Engine):
         _current = previous
 
 
-_EXPECTED_ABI = 2
+_EXPECTED_ABI = 3
 
 
 def abi_version() -> int:
@@ -339,6 +342,32 @@ def spec_raw(spec: dict) -> bytes:
     if not s:
         reason = _cstr(lib.freetls_aux_error()) or "invalid spec"
         raise SpecError(f"spec: {reason}")
+    return bytes.fromhex(s)
+
+
+def quic_id_list() -> list:
+    """Names of the built-in QUIC presets (uQUIC's QUICIDs)."""
+    ffi, lib = _load()
+    return json.loads(_cstr(lib.freetls_quic_id_list()) or "[]")
+
+
+def quic_id_raw(name: str, no_sni: bool = False, alpn=None) -> bytes:
+    """Build a QUIC preset's ClientHello offline (raw handshake bytes).
+
+    ``alpn=None`` leaves ALPN untouched, ``alpn=[]`` removes it, otherwise a
+    list of protocol strings. No network is used.
+    """
+    ffi, lib = _load()
+    if alpn is None:
+        alpn_json = b""
+    elif alpn == []:
+        alpn_json = b"[]"
+    else:
+        alpn_json = json.dumps(list(alpn)).encode()
+    s = _cstr(lib.freetls_quic_id_raw(name.encode(), 1 if no_sni else 0, alpn_json))
+    if not s:
+        reason = _cstr(lib.freetls_aux_error()) or "invalid QUIC preset"
+        raise SpecError(f"quic preset {name!r}: {reason}")
     return bytes.fromhex(s)
 
 
@@ -438,6 +467,21 @@ class EngineSession:
             state = self.state()
             raise HandshakeError(
                 f"handshake failed (rc={rc}): {self.last_error()}", state=vars(state)
+            )
+
+    def quic_handshake(self, fd: int, sni: str | None, host: str, port: int) -> None:
+        """Perform the QUIC handshake over a UDP socket's fd.
+
+        The socket must be unconnected (quic-go sends with WriteTo); ``host`` is
+        the peer's literal IP, already resolved by the caller.
+        """
+        rc = self._lib.freetls_quic_handshake(
+            self._handle, fd, (sni or "").encode(), host.encode(), port
+        )
+        if rc != 0:
+            state = self.state()
+            raise HandshakeError(
+                f"QUIC handshake failed (rc={rc}): {self.last_error()}", state=vars(state)
             )
 
     def read(self, n: int) -> bytes:

@@ -25,6 +25,13 @@ def effective_hello(spec: FingerprintSpec) -> bytes:
     """Build the ClientHello ``spec`` will emit, offline (no network)."""
     if spec.chlo_json is not None:
         return chlo_raw(spec.chlo_json)
+    if spec.quic_id is not None:
+        from .engine import quic_id_raw
+
+        raw = quic_id_raw(spec.quic_id, spec.preset_no_sni, spec.preset_alpn)
+        if not raw:
+            raise SpecError(f"safe mode: cannot build QUIC preset {spec.quic_id!r}")
+        return raw
     if spec.preset is not None:
         raw = preset_raw_opts(spec.preset, spec.preset_no_sni, spec.preset_alpn)
         if not raw:

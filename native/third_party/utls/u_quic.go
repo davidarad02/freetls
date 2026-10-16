@@ -99,6 +99,7 @@ func (q *UQUICConn) Close() error {
 // HandleData handles handshake bytes received from the peer.
 // It may produce connection events, which may be read with NextEvent.
 func (q *UQUICConn) HandleData(level QUICEncryptionLevel, data []byte) error {
+	freetlsRecordQUICHandshake(q, level, data) // [freetls] capture the ServerHello for JA4Sq
 	c := q.conn
 	if c.in.level != level {
 		return quicError(c.in.setErrorLocked(errors.New("tls: handshake data received at wrong level")))

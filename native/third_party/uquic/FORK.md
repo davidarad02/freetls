@@ -25,6 +25,8 @@ freetls changes are **new files**, plus a small, documented **patch set**
 | `internal/handshake/freetls_evp_ccm_stub.go` | Go-only build: both hooks report "no such suite", so upstream's panics stand *(Route C)* |
 | `internal/handshake/freetls_evp_ccm_test.go` | Go tests for the CCM AEAD and header protection *(Route C)* |
 | `internal/handshake/freetls_evp_ccm_stub_test.go` | Asserts CCM is unavailable (panics) without the libcrypto backend *(Route C)* |
+| `internal/handshake/freetls_server_hello.go` | Exposes the uTLS fork's ServerHello capture through the crypto setup *(Route C)* |
+| `u_server_hello.go` | `Conn.FreetlsServerHello()`: the raw ServerHello, for JA4Sq *(Route C)* |
 
 `FORK.md` is also ours.
 

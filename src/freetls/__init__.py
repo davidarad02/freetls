@@ -46,6 +46,7 @@ from .model import (
     set_default_verify,
     set_safe_mode,
 )
+from .quic import QUICSession
 from .session import TLSSession
 
 __version__ = "0.0.1"
@@ -69,6 +70,7 @@ __all__ = [
     "SignatureScheme",
     "NamedGroup",
     "TLSSession",
+    "QUICSession",
     "TLSContext",
     "modes",
     "profiles",

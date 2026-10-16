@@ -47,6 +47,12 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _free_udp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def _find_go() -> str | None:
     env = os.environ.get("FREETLS_GO")
     if env:
@@ -221,6 +227,49 @@ def go_server(certs, tmp_path_factory):
                 break
         except OSError:
             time.sleep(0.1)
+    try:
+        yield TLSServer(proc, port)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+@pytest.fixture()
+def h3_server(certs, tmp_path_factory):
+    """A local Go HTTP/3 server, built on upstream quic-go.
+
+    Deliberately not the uQUIC fork freetls ships, so the client is exercised
+    against an independent QUIC/TLS implementation.
+    """
+    go = _find_go()
+    if go is None:
+        pytest.skip("Go toolchain not available")
+    cert, key = certs
+    src = Path(__file__).resolve().parent / "servers" / "go_http3"
+    binary = tmp_path_factory.mktemp("gobin") / "go_http3"
+    env = dict(os.environ)
+    env.setdefault("GOPATH", os.path.expanduser("~/go"))
+    try:
+        subprocess.run([go, "build", "-o", str(binary), "."], cwd=src, check=True, env=env)
+    except subprocess.CalledProcessError:
+        pytest.skip("could not build the HTTP/3 test server")
+    port = _free_udp_port()
+    proc = subprocess.Popen(
+        [str(binary), f"127.0.0.1:{port}", cert, key],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    # QUIC is UDP, so there is nothing to TCP-probe; give the listener a moment.
+    for _ in range(50):
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+    if proc.poll() is not None:
+        pytest.skip("HTTP/3 test server failed to start")
     try:
         yield TLSServer(proc, port)
     finally:

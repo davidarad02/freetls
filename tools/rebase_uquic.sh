@@ -15,8 +15,12 @@ NATIVE="$ROOT/native"
 FORK="$NATIVE/third_party/uquic"
 
 # Files that are ours (not from upstream) and must survive a rebase.
-OURS="FORK.md internal/handshake/freetls_evp_ccm.go \
-internal/handshake/freetls_evp_ccm_test.go"
+OURS="FORK.md u_server_hello.go \
+internal/handshake/freetls_evp_ccm.go \
+internal/handshake/freetls_evp_ccm_stub.go \
+internal/handshake/freetls_evp_ccm_test.go \
+internal/handshake/freetls_evp_ccm_stub_test.go \
+internal/handshake/freetls_server_hello.go"
 
 find_go() {
     for cand in "${FREETLS_GO:-}" go "$HOME/.local/go/bin/go" \

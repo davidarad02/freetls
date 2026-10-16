@@ -8,7 +8,7 @@ directly onto the native engine's JSON spec.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, cast
 
 from .errors import SpecError
@@ -18,6 +18,10 @@ TLS10 = 0x0301
 TLS11 = 0x0302
 TLS12 = 0x0303
 TLS13 = 0x0304
+
+# QUIC version wire constants (RFC 9000 / RFC 9369).
+QUIC_V1 = 0x00000001
+QUIC_V2 = 0x6B3343CF
 
 # Library-wide default for certificate verification. Secure by default; tests
 # and fingerprinting labs can opt out with set_default_verify(False).
@@ -72,7 +76,165 @@ _KNOWN_KINDS = {
     "pre_shared_key",
     "generic",
     "grease",
+    "quic_transport_parameters",
 }
+
+# Transport-parameter kinds the engine can build as typed values; anything else
+# must go through "fake" (an explicit id + value bytes).
+_TP_VARINT_KINDS = {
+    "max_idle_timeout",
+    "max_udp_payload_size",
+    "initial_max_data",
+    "initial_max_stream_data_bidi_local",
+    "initial_max_stream_data_bidi_remote",
+    "initial_max_stream_data_uni",
+    "initial_max_streams_bidi",
+    "initial_max_streams_uni",
+    "max_ack_delay",
+    "active_connection_id_limit",
+    "max_datagram_frame_size",
+}
+
+_TP_EMPTY_KINDS = {"disable_active_migration", "grease_quic_bit"}
+
+_TP_KNOWN_KINDS = (
+    _TP_VARINT_KINDS
+    | _TP_EMPTY_KINDS
+    | {
+        "initial_source_connection_id",
+        "version_information",
+        "grease",
+        "padding",
+        "fake",
+    }
+)
+
+
+@dataclass
+class TransportParameter:
+    """One QUIC transport parameter, carried in the ClientHello's ext 57.
+
+    ``kind`` selects a typed parameter the engine knows how to encode; ``"fake"``
+    escapes to an arbitrary id with verbatim value bytes (hex in ``data``), which
+    is how vendor parameters such as Google's ``google_quic_version`` are sent.
+    """
+
+    kind: str
+    id: int | None = None
+    value: int | None = None
+    data: str | None = None  # hex, verbatim value bytes
+    length: int = 0  # for "grease"
+    versions: list[int] = field(default_factory=list)  # version_information
+    legacy: bool = False  # version_information: use the pre-RFC id
+
+    def __post_init__(self) -> None:
+        if self.kind not in _TP_KNOWN_KINDS:
+            raise SpecError(f"unknown transport parameter kind: {self.kind!r}")
+        if self.kind == "fake" and self.id is None:
+            raise SpecError("fake transport parameter requires an id")
+        if self.kind == "fake" and self.id == 0:
+            raise SpecError("fake transport parameter id must be non-zero")
+        if self.kind in _TP_VARINT_KINDS and self.value is None:
+            raise SpecError(f"transport parameter {self.kind!r} requires a value")
+        if self.id is not None:
+            self.id = int(self.id)
+        if self.value is not None:
+            self.value = int(self.value)
+        self.length = int(self.length)
+        self.versions = [int(v) for v in self.versions]
+
+    def to_engine(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"kind": self.kind}
+        if self.id is not None:
+            out["id"] = self.id
+        if self.value is not None:
+            out["value"] = self.value
+        if self.data is not None:
+            out["data"] = self.data
+        if self.length:
+            out["length"] = self.length
+        if self.versions:
+            out["versions"] = self.versions
+        if self.legacy:
+            out["legacy"] = True
+        return out
+
+    @classmethod
+    def varint(cls, kind: str, value: int) -> TransportParameter:
+        return cls(kind, value=value)
+
+    @classmethod
+    def grease(cls, length: int = 4) -> TransportParameter:
+        return cls("grease", length=length)
+
+    @classmethod
+    def fake(cls, param_id: int, data: str = "") -> TransportParameter:
+        return cls("fake", id=param_id, data=data)
+
+    @classmethod
+    def padding(cls, data: str = "") -> TransportParameter:
+        return cls("padding", data=data)
+
+    @classmethod
+    def version_information(
+        cls, chosen: int, *available: int, legacy: bool = False
+    ) -> TransportParameter:
+        return cls("version_information", value=chosen, versions=list(available), legacy=legacy)
+
+    @classmethod
+    def source_connection_id(cls, data: str = "") -> TransportParameter:
+        return cls("initial_source_connection_id", data=data)
+
+
+@dataclass
+class QuicInitialSpec:
+    """The QUIC Initial packet shape around the ClientHello.
+
+    A spec with ``quic`` set is emitted over UDP as a QUIC Initial flight rather
+    than as TLS records over TCP. The ClientHello itself still comes from
+    ``ciphers``/``extensions`` (or a preset), with the transport parameters in
+    the ``quic_transport_parameters`` extension.
+    """
+
+    version: int = QUIC_V1
+    dcid_len: int = 8
+    scid_len: int = 0
+    token: str | None = None  # hex
+    udp_datagram_min_size: int = 1200
+    packet_number: int = 0
+    packet_number_len: int = 1
+    randomize_transport_parameters: bool = False
+    suppress_transport_parameters: list[int] = field(default_factory=list)
+
+    def to_engine(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "version": int(self.version),
+            "dcid_len": int(self.dcid_len),
+            "scid_len": int(self.scid_len),
+            "udp_datagram_min_size": int(self.udp_datagram_min_size),
+            "packet_number": int(self.packet_number),
+            "packet_number_len": int(self.packet_number_len),
+        }
+        if self.token is not None:
+            out["token"] = self.token
+        if self.randomize_transport_parameters:
+            out["randomize_transport_parameters"] = True
+        if self.suppress_transport_parameters:
+            out["suppress_transport_parameters"] = [
+                int(p) for p in self.suppress_transport_parameters
+            ]
+        return out
+
+
+def _copy_extension(e: Extension) -> Extension:
+    """Deep-copy an Extension, keeping transport parameters as dataclasses.
+
+    ``dataclasses.asdict`` would flatten nested ``TransportParameter`` objects
+    into dicts, so they are lifted back out and rebuilt.
+    """
+    data = asdict(e)
+    params = data.pop("transport_parameters", [])
+    return Extension(**data, transport_parameters=[TransportParameter(**p) for p in params])
 
 
 @dataclass
@@ -92,12 +254,18 @@ class Extension:
     points: list[int] = field(default_factory=list)
     server_name: str | None = None
     algorithms: list[int] = field(default_factory=list)
+    # QUIC transport parameters (kind "quic_transport_parameters").
+    transport_parameters: list[TransportParameter] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.kind not in _KNOWN_KINDS:
             raise SpecError(f"unknown extension kind: {self.kind!r}")
         if self.kind == "generic" and self.id is None:
             raise SpecError("generic extension requires an id")
+        self.transport_parameters = [
+            p if isinstance(p, TransportParameter) else TransportParameter(**p)
+            for p in self.transport_parameters
+        ]
         # Accept ints, IntEnum members, or names for the value lists.
         from .fingerprint.tables import as_group, as_sigalg
 
@@ -135,6 +303,8 @@ class Extension:
             out["algorithms"] = self.algorithms
         if self.kind == "padding" and self.values:
             out["padding_len"] = self.values[0]
+        if self.transport_parameters:
+            out["transport_parameters"] = [p.to_engine() for p in self.transport_parameters]
         return out
 
     # Convenience constructors -------------------------------------------------
@@ -198,6 +368,15 @@ class Extension:
     def application_settings(cls, *protocols: str) -> Extension:
         """ALPS application_settings extension (0x4469)."""
         return cls("application_settings", strings=list(protocols))
+
+    @classmethod
+    def quic_transport_parameters(cls, *params: TransportParameter) -> Extension:
+        """QUIC transport parameters (ext 0x0039), in wire order.
+
+        Required in a QUIC ClientHello. Order is itself a fingerprinting signal
+        (real clients differ), so the list is emitted verbatim.
+        """
+        return cls("quic_transport_parameters", transport_parameters=list(params))
 
     @classmethod
     def grease(cls, value: int | None = None) -> Extension:
@@ -271,6 +450,15 @@ class FingerprintSpec:
     h2_window_update: int = 0
     h2_pseudo_header_order: list | None = None
 
+    # QUIC / HTTP-3 (see docs/route-c-plan.md). When ``quic`` is set the spec is
+    # emitted as a QUIC Initial flight over UDP instead of TLS records over TCP.
+    quic: QuicInitialSpec | None = None
+    # A built-in uQUIC preset name (e.g. "QUICChrome_146_IPv4"), used instead of
+    # ciphers/extensions when set.
+    quic_id: str | None = None
+    # Reserved for the deferred 0-RTT work; not yet honoured by the engine.
+    quic_early_data: bool = False
+
     def __post_init__(self) -> None:
         if self.verify is None:
             self.verify = DEFAULT_VERIFY
@@ -323,6 +511,14 @@ class FingerprintSpec:
             out["compression"] = list(self.compression)
         if self.session_cache:
             out["session_cache"] = int(self.session_cache)
+        if self.quic is not None:
+            out["transport"] = "quic"
+            out["quic"] = self.quic.to_engine()
+        if self.quic_id is not None:
+            out["transport"] = "quic"
+            out["quic_id"] = self.quic_id
+        if self.quic_early_data:
+            out["quic_early_data"] = True
         return out
 
     def find(self, kind: str) -> Extension | None:
@@ -341,7 +537,7 @@ class FingerprintSpec:
     def copy(self) -> FingerprintSpec:
         return FingerprintSpec(
             ciphers=list(self.ciphers),
-            extensions=[Extension(**asdict(e)) for e in self.extensions],
+            extensions=[_copy_extension(e) for e in self.extensions],
             vers_min=self.vers_min,
             vers_max=self.vers_max,
             server_name=self.server_name,
@@ -374,4 +570,14 @@ class FingerprintSpec:
             h2_pseudo_header_order=(
                 None if self.h2_pseudo_header_order is None else list(self.h2_pseudo_header_order)
             ),
+            quic=(
+                None
+                if self.quic is None
+                else replace(
+                    self.quic,
+                    suppress_transport_parameters=list(self.quic.suppress_transport_parameters),
+                )
+            ),
+            quic_id=self.quic_id,
+            quic_early_data=self.quic_early_data,
         )

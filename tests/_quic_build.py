@@ -31,12 +31,20 @@ def build_quic_initial(
     pn_len: int = 1,
     token: bytes = b"",
     pad_to: int = 1200,
+    keys: tuple[bytes, bytes, bytes] | None = None,
 ) -> bytes:
-    """Return a client Initial packet carrying ``crypto_payload`` in a CRYPTO frame."""
+    """Return a client Initial packet carrying ``crypto_payload`` in a CRYPTO frame.
+
+    ``keys`` overrides the (key, iv, hp) derived from ``dcid`` — pass it to build
+    a later Initial of a flight, whose DCID is the server's connection ID while
+    its keys still come from the first Initial (RFC 9001 §5.2).
+    """
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    key, iv, hp = initial_keys(version, dcid)
+    if keys is None:
+        keys = initial_keys(version, dcid)
+    key, iv, hp = keys
     frame = crypto_frame(crypto_payload, crypto_offset)
     prefix = (
         bytes([0xC0 | (pn_len - 1)])

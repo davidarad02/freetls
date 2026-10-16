@@ -113,6 +113,30 @@ def test_crypto_reassembled_across_packets():
     assert ch.server_names == ["example.com"]
 
 
+def test_later_initial_with_server_dcid_still_decrypts():
+    """RFC 9001 5.2: the whole client flight is keyed from the first DCID.
+
+    After the server's first packet the client addresses the server's connection
+    ID, so a later Initial carries a different DCID — but its keys are still the
+    ones derived from the *first* Initial's DCID.
+    """
+    hello = _quic_client_hello()
+    half = len(hello) // 2
+    keys = initial_keys(QUIC_VERSION_1, Q.RFC9001_DCID)
+    packets = [
+        Q.build_quic_initial(hello[:half], crypto_offset=0, packet_number=0),
+        Q.build_quic_initial(
+            hello[half:],
+            crypto_offset=half,
+            packet_number=1,
+            dcid=b"\x01\x02\x03\x04",
+            keys=keys,
+        ),
+    ]
+    ch = parse_quic_client_hello(packets)
+    assert ch.server_names == ["example.com"]
+
+
 def test_initial_carries_token():
     packet = Q.build_quic_initial(_quic_client_hello(), token=b"\xaa" * 8)
     assert parse_initial(packet).token == b"\xaa" * 8

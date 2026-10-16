@@ -1,0 +1,201 @@
+"""QUIC / HTTP-3 sessions.
+
+:class:`QUICSession` is the UDP counterpart of
+:class:`~freetls.session.TLSSession`: Python owns the connected UDP socket, the
+engine (built on the uQUIC fork of quic-go, itself built on our uTLS fork)
+drives the QUIC handshake, and the fingerprints are reported with the QUIC
+(``q``) transport prefix.
+
+See ``docs/route-c-plan.md``.
+"""
+
+from __future__ import annotations
+
+import os
+import socket
+
+from .engine import EngineSession, EngineState
+from .errors import FreeTLSError, HandshakeError, SpecError
+from .fingerprint import ja4_from_bytes, ja4s_from_bytes
+from .model import FingerprintSpec
+
+# HTTP/3 is negotiated over ALPN; QUIC connections never offer h2/http1.1.
+DEFAULT_QUIC_ALPN = ["h3"]
+
+
+class QUICSession:
+    """A connected, fingerprinted QUIC session."""
+
+    def __init__(self, spec: FingerprintSpec):
+        self.spec = spec
+        self._engine: EngineSession | None = None
+        self._sock: socket.socket | None = None
+        self._remote: tuple[str, int] | None = None
+        self._sni = ""
+        self._closed = False
+        self._handshaked = False
+        self._client_hello = b""
+        self._fp: dict | None = None
+
+    # -- connection ----------------------------------------------------------
+    def connect(
+        self,
+        host: str,
+        port: int = 443,
+        timeout: float | None = None,
+        server_hostname: str | None = None,
+    ) -> QUICSession:
+        if timeout is not None:
+            # The connect timeout also covers the QUIC handshake.
+            self.spec.timeout_ms = max(1, int(timeout * 1000))
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)
+        af, socktype, proto, _, addr = infos[0]
+        # The socket stays *unconnected*: quic-go sends with WriteTo, which Go
+        # refuses on a pre-connected socket. Python resolves the host and passes
+        # the literal IP to the engine instead.
+        sock = socket.socket(af, socktype, proto)
+        self._remote = (str(addr[0]), int(addr[1]))
+        try:
+            if timeout is not None:
+                sock.settimeout(timeout)
+        except OSError:
+            sock.close()
+            raise
+        try:
+            return self.wrap_socket(sock, server_hostname=server_hostname or host)
+        except (HandshakeError, SpecError):
+            self._cleanup()
+            sock.close()
+            raise
+
+    def wrap_socket(
+        self,
+        sock: socket.socket,
+        server_hostname: str,
+        do_handshake_on_connect: bool = True,
+    ) -> QUICSession:
+        """Wrap an already-connected UDP socket, performing the QUIC handshake."""
+        self._sock = sock
+        self._sni = server_hostname or self.spec.server_name or ""
+        if do_handshake_on_connect:
+            self.do_handshake()
+        return self
+
+    def do_handshake(self) -> None:
+        """Perform (or complete) the QUIC handshake."""
+        if self._handshaked:
+            return
+        if self._sock is None:
+            raise FreeTLSError("cannot handshake: no socket; call connect()/wrap_socket() first")
+        if self._remote is None:
+            raise FreeTLSError("cannot handshake: no peer address; call connect() first")
+        from .safety import validate
+
+        validate(self.spec)
+        self._engine = EngineSession(self.spec.to_engine())
+        try:
+            fd = os.dup(self._sock.fileno())
+            self._engine.quic_handshake(fd, self._sni, self._remote[0], self._remote[1])
+        except HandshakeError:
+            self._engine.free()
+            self._engine = None
+            raise
+        self._handshaked = True
+        self._client_hello = self._engine.client_hello()
+        self._fp = None
+
+    def _cleanup(self) -> None:
+        if self._engine is not None:
+            self._engine.close()
+            self._engine.free()
+            self._engine = None
+        self._handshaked = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._cleanup()
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+
+    def __enter__(self) -> QUICSession:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    # -- fingerprints --------------------------------------------------------
+    @property
+    def client_hello(self) -> bytes:
+        """The ClientHello the QUIC stack put in the Initial packet's CRYPTO frame."""
+        return self._client_hello
+
+    @property
+    def fingerprints(self) -> dict:
+        if self._fp is None:
+            fp: dict = {}
+            if self._client_hello:
+                fp.update(ja4_from_bytes(self._client_hello, transport="q"))
+            self._fp = fp
+        return self._fp
+
+    @property
+    def ja4q(self) -> str | None:
+        return self.fingerprints.get("ja4")
+
+    @property
+    def ja4q_r(self) -> str | None:
+        return self.fingerprints.get("ja4_r")
+
+    @property
+    def ja4sq(self) -> str | None:
+        """JA4S for the QUIC handshake.
+
+        QUIC carries the ServerHello in the server's Initial packet, so a
+        passive capture cannot recover it (the later Handshake packet is
+        encrypted under handshake keys). The engine captures it from the TLS
+        stack instead, which is what this reports.
+        """
+        sh = self.server_hello()
+        if not sh:
+            return None
+        return ja4s_from_bytes(sh, transport="q").get("ja4s")
+
+    def server_hello(self) -> bytes:
+        """The ServerHello, if the engine captured one (empty otherwise)."""
+        if self._engine is None:
+            return b""
+        return self._engine.server_hello()
+
+    # -- ssl.SSLSocket-like accessors ---------------------------------------
+    @property
+    def state(self) -> EngineState:
+        return self._engine.state() if self._engine else EngineState()
+
+    def version(self) -> str | None:
+        return self.state.version or None
+
+    def selected_alpn_protocol(self) -> str | None:
+        return self.state.alpn or None
+
+    def cipher(self):
+        st = self.state
+        if not st.cipher_suite:
+            return None
+        from .fingerprint.tables import cipher_name
+
+        name = cipher_name(st.cipher_suite) or f"0x{st.cipher_suite:04x}"
+        return (name, st.version, 0)
+
+    def peer_chain(self) -> list:
+        """The peer certificate chain as a list of DER bytes (leaf first)."""
+        return self.state.peer_certs_der
+
+    @property
+    def did_resume(self) -> bool:
+        return self.state.did_resume

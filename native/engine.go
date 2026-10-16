@@ -46,6 +46,8 @@ type extJSON struct {
 	Algorithms []uint16 `json:"algorithms,omitempty"`
 	// PaddingLen, when > 0, requests a fixed-length padding extension.
 	PaddingLen int `json:"padding_len,omitempty"`
+	// TransportParameters carries a quic_transport_parameters (0x0039) body.
+	TransportParameters []tpJSON `json:"transport_parameters,omitempty"`
 }
 
 type specJSON struct {
@@ -95,6 +97,13 @@ type specJSON struct {
 	// SessionCache, when > 0, enables TLS session resumption through a shared
 	// process-wide LRU session cache (TLS 1.2 tickets and TLS 1.3 PSKs).
 	SessionCache int `json:"session_cache,omitempty"`
+
+	// QUIC / HTTP-3. Transport=="quic" marks the spec as a QUIC Initial flight;
+	// QuicID selects a built-in uQUIC preset instead of the explicit extensions.
+	Transport     string           `json:"transport,omitempty"`
+	Quic          *quicInitialJSON `json:"quic,omitempty"`
+	QuicID        string           `json:"quic_id,omitempty"`
+	QuicEarlyData bool             `json:"quic_early_data,omitempty"`
 
 	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
@@ -190,6 +199,13 @@ type session struct {
 	alpnDel  bool
 	lastErr  string
 	timeout  time.Duration
+	// QUIC / HTTP-3 state (see quic.go).
+	quicID    string
+	qinit     *quicInitialJSON
+	quic      *quicState
+	quicCH    []byte
+	quicSH    []byte
+	quicEarly bool
 }
 
 var (
@@ -339,6 +355,12 @@ func buildExtension(e extJSON) (utls.TLSExtension, error) {
 		return &utls.GenericExtension{Id: *e.ID, Data: data}, nil
 	case "grease":
 		return &utls.UtlsGREASEExtension{}, nil
+	case "quic_transport_parameters":
+		tps, err := buildTransportParameters(e.TransportParameters)
+		if err != nil {
+			return nil, err
+		}
+		return &utls.QUICTransportParametersExtension{TransportParameters: tps}, nil
 	default:
 		return nil, fmt.Errorf("unknown extension type %q", e.Type)
 	}
@@ -593,7 +615,7 @@ func freetls_version() *C.char {
 
 // ABI version of the C surface. Bump when an export's signature/semantics
 // changes incompatibly; the Python binding refuses to load on a major mismatch.
-const abiVersion = 2
+const abiVersion = 3
 
 //export freetls_abi_version
 func freetls_abi_version() C.int {
@@ -761,6 +783,7 @@ var safeExtensionIDs = []uint16{
 	0x002b, // supported_versions
 	0x002d, // psk_key_exchange_modes
 	0x0033, // key_share
+	0x0039, // quic_transport_parameters
 	0x4469, // application_settings (ALPS)
 	0x44cd, // application_settings (ALPS, alternate codepoint)
 	0xff01, // renegotiation_info
@@ -904,7 +927,8 @@ func freetls_session_new(specJSON *C.char) (id C.longlong) {
 	}
 	sess := &session{spec: chs, config: cfg, preset: s.Preset, chloJSON: s.ChloJSON,
 		noSNI: s.PresetNoSNI, alpn: s.PresetALPN,
-		alpnSet: s.PresetALPN != nil, alpnDel: s.PresetALPNRemove}
+		alpnSet: s.PresetALPN != nil, alpnDel: s.PresetALPNRemove,
+		quicID: s.QuicID, qinit: s.Quic, quicEarly: s.QuicEarlyData}
 	if s.TimeoutMS > 0 {
 		sess.timeout = time.Duration(s.TimeoutMS) * time.Millisecond
 	}
@@ -935,6 +959,7 @@ func freetls_session_free(h C.longlong) {
 	if s.raw != nil {
 		_ = s.raw.Close()
 	}
+	closeQUIC(s)
 }
 
 // freetls_handshake performs the TLS handshake over an already-connected fd.
@@ -1096,6 +1121,7 @@ func freetls_close(h C.longlong) {
 	if s.uconn != nil {
 		_ = s.uconn.Close()
 	}
+	closeQUIC(s)
 }
 
 // freetls_set_timeout updates the per-session I/O timeout (milliseconds).
@@ -1129,7 +1155,15 @@ func freetls_get_client_hello(h C.longlong) (rc *C.char) {
 		}
 	}()
 	s := getSession(int64(h))
-	if s == nil || s.tee == nil {
+	if s == nil {
+		return C.CString("")
+	}
+	// A QUIC session has no TLS record layer; the ClientHello is the one the
+	// QUIC stack marshalled (see freetls_quic_handshake).
+	if s.quic != nil {
+		return hexOf(s.quicCH)
+	}
+	if s.tee == nil {
 		return C.CString("")
 	}
 	out, _ := s.tee.captured()
@@ -1144,7 +1178,15 @@ func freetls_get_server_hello(h C.longlong) (rc *C.char) {
 		}
 	}()
 	s := getSession(int64(h))
-	if s == nil || s.tee == nil {
+	if s == nil {
+		return C.CString("")
+	}
+	// QUIC has no TLS record stream; the ServerHello is captured by the fork's
+	// QUIC Initial-level hook (see freetls_quic_server_hello.go).
+	if s.quic != nil {
+		return hexOf(s.quicSH)
+	}
+	if s.tee == nil {
 		return C.CString("")
 	}
 	_, in := s.tee.captured()
@@ -1177,32 +1219,41 @@ func freetls_get_state(h C.longlong) (rc *C.char) {
 		return C.CString("{}")
 	}
 	st := stateJSON{Error: s.lastErr}
-	if s.uconn != nil {
-		cs := s.uconn.ConnectionState()
-		st.Version = tlsVersionName(cs.Version)
-		st.CipherSuite = uint16(cs.CipherSuite)
-		st.ALPN = cs.NegotiatedProtocol
-		st.ServerName = cs.ServerName
-		for _, c := range cs.PeerCertificates {
-			enc := base64.StdEncoding.EncodeToString(c.Raw)
-			st.PeerCertsB64 = append(st.PeerCertsB64, enc)
-		}
-		if len(st.PeerCertsB64) > 0 {
-			st.PeerCertB64 = st.PeerCertsB64[0]
-		}
-		st.DidResume = cs.DidResume
-		if len(cs.OCSPResponse) > 0 {
-			st.OCSPB64 = base64.StdEncoding.EncodeToString(cs.OCSPResponse)
-		}
-		for _, sct := range cs.SignedCertificateTimestamps {
-			st.SCTB64 = append(st.SCTB64, base64.StdEncoding.EncodeToString(sct))
-		}
-		if len(cs.PeerApplicationSettings) > 0 {
-			st.ALPSB64 = base64.StdEncoding.EncodeToString(cs.PeerApplicationSettings)
-		}
+	switch {
+	case s.quic != nil && s.quic.conn != nil:
+		fillState(&st, s.quic.conn.ConnectionState().TLS)
+	case s.uconn != nil:
+		fillState(&st, s.uconn.ConnectionState())
 	}
 	b, _ := json.Marshal(st)
 	return C.CString(string(b))
+}
+
+// fillState copies a TLS connection state into the JSON state report. It is
+// shared by the TCP (uconn) and QUIC (uQUIC conn) paths, which expose the same
+// uTLS ConnectionState.
+func fillState(st *stateJSON, cs utls.ConnectionState) {
+	st.Version = tlsVersionName(cs.Version)
+	st.CipherSuite = uint16(cs.CipherSuite)
+	st.ALPN = cs.NegotiatedProtocol
+	st.ServerName = cs.ServerName
+	for _, c := range cs.PeerCertificates {
+		enc := base64.StdEncoding.EncodeToString(c.Raw)
+		st.PeerCertsB64 = append(st.PeerCertsB64, enc)
+	}
+	if len(st.PeerCertsB64) > 0 {
+		st.PeerCertB64 = st.PeerCertsB64[0]
+	}
+	st.DidResume = cs.DidResume
+	if len(cs.OCSPResponse) > 0 {
+		st.OCSPB64 = base64.StdEncoding.EncodeToString(cs.OCSPResponse)
+	}
+	for _, sct := range cs.SignedCertificateTimestamps {
+		st.SCTB64 = append(st.SCTB64, base64.StdEncoding.EncodeToString(sct))
+	}
+	if len(cs.PeerApplicationSettings) > 0 {
+		st.ALPSB64 = base64.StdEncoding.EncodeToString(cs.PeerApplicationSettings)
+	}
 }
 
 //export freetls_last_error

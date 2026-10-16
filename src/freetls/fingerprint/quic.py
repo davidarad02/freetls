@@ -153,13 +153,23 @@ def _reconstruct_pn(truncated: int, pn_len: int, largest_pn: int | None) -> int:
     return truncated
 
 
-def parse_initial(packet: bytes, *, largest_pn: int | None = None) -> QuicInitial:
+def parse_initial(
+    packet: bytes,
+    *,
+    largest_pn: int | None = None,
+    keys: tuple[bytes, bytes, bytes] | None = None,
+) -> QuicInitial:
     """Decrypt one client Initial packet and return its header plus frames.
 
     ``largest_pn`` is the largest packet number seen so far on the connection;
     pass it when parsing a flight in order so truncated packet numbers are
     reconstructed correctly (RFC 9001 §5.4). A client's first Initial carries
     PN 0 or 1, where the truncated value is already exact.
+
+    ``keys`` overrides the derived (key, iv, hp). Pass it when parsing a flight:
+    RFC 9001 §5.2 keys every client Initial from the *first* Initial's
+    Destination Connection ID, and later client Initials carry the server's
+    connection ID as their DCID — deriving per packet would use wrong keys.
     """
     if len(packet) < 7:
         raise QuicParseError("packet too short")
@@ -191,7 +201,9 @@ def parse_initial(packet: bytes, *, largest_pn: int | None = None) -> QuicInitia
     if end > len(packet):
         raise QuicParseError("Initial packet length overruns capture")
 
-    key, iv, hp = initial_keys(version, dcid)
+    if keys is None:
+        keys = initial_keys(version, dcid)
+    key, iv, hp = keys
     if pn_offset + 4 + 16 > end:
         raise QuicParseError("packet too short for header-protection sample")
     sample = packet[pn_offset + 4 : pn_offset + 4 + 16]
@@ -268,8 +280,11 @@ def iter_frames(frames: bytes) -> Iterable[tuple[int, bytes]]:
 def _crypto_stream(packets: Iterable[bytes]) -> bytes:
     chunks: dict[int, bytes] = {}
     largest_pn: int | None = None
+    keys: tuple[bytes, bytes, bytes] | None = None
     for packet in packets:
-        initial = parse_initial(packet, largest_pn=largest_pn)
+        initial = parse_initial(packet, largest_pn=largest_pn, keys=keys)
+        if keys is None:
+            keys = initial_keys(initial.version, initial.dcid)
         largest_pn = initial.packet_number
         for ftype, frame in iter_frames(initial.frames):
             if ftype != 0x06:
