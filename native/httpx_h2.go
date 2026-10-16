@@ -237,7 +237,7 @@ func (c *h2Client) readFrame() error {
 	return c.handle(f)
 }
 
-func doH2(s *session, req h2RequestSpec) (*h2Response, error) {
+func doH2(conn net.Conn, holder **h2Client, req h2RequestSpec) (*h2Response, error) {
 	resp := &h2Response{Headers: [][2]string{}}
 
 	settings := req.Settings
@@ -254,7 +254,6 @@ func doH2(s *session, req h2RequestSpec) (*h2Response, error) {
 		}
 	}
 
-	conn := s.uconn
 	if conn == nil {
 		return nil, fmt.Errorf("no active session")
 	}
@@ -263,14 +262,14 @@ func doH2(s *session, req h2RequestSpec) (*h2Response, error) {
 		defer conn.SetDeadline(time.Time{})
 	}
 
-	if s.h2 == nil {
+	if *holder == nil {
 		c := newH2Client(conn)
 		if err := c.start(settings, req.WindowUpdate); err != nil {
 			return nil, err
 		}
-		s.h2 = c
+		*holder = c
 	}
-	c := s.h2
+	c := *holder
 	c.sentSettings = settings
 	if req.WindowUpdate > 0 {
 		c.sentWindow = req.WindowUpdate
@@ -379,7 +378,7 @@ func freetls_h2_request(h C.longlong, reqJSON *C.char) (out *C.char) {
 		b, _ := json.Marshal(h2Response{Error: err.Error()})
 		return C.CString(string(b))
 	}
-	resp, err := doH2(s, req)
+	resp, err := doH2(s.uconn, &s.h2, req)
 	if err != nil {
 		b, _ := json.Marshal(h2Response{Error: err.Error()})
 		return C.CString(string(b))

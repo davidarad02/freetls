@@ -135,7 +135,8 @@ func TestH2WireFingerprint(t *testing.T) {
 		PseudoOrder:  []string{"method", "authority", "scheme", "path"},
 		TimeoutMS:    5000,
 	}
-	resp, err := doH2(cli, req)
+	var h2c *h2Client
+	resp, err := doH2(cli, &h2c, req)
 	if err != nil {
 		t.Fatalf("doH2: %v", err)
 	}
@@ -218,7 +219,8 @@ func TestH2BodyAcrossDataFrames(t *testing.T) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 
-	resp, err := doH2(conn, h2RequestSpec{Method: "GET", Scheme: "https", Authority: "x", Path: "/"})
+	var h2c2 *h2Client
+	resp, err := doH2(conn, &h2c2, h2RequestSpec{Method: "GET", Scheme: "https", Authority: "x", Path: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
