@@ -746,6 +746,10 @@ type Config struct {
 	// testing or in combination with VerifyConnection or VerifyPeerCertificate.
 	InsecureSkipVerify bool
 
+	// Anonymous permits the use of anonymous cipher suites (ADH), which provide
+	// no server authentication. freetls addition; default false.
+	Anonymous bool
+
 	// InsecureSkipTimeVerify controls whether a client verifies the server's
 	// certificate chain against time. If InsecureSkipTimeVerify is true,
 	// crypto/tls accepts the certificate even when it is expired.

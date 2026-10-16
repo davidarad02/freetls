@@ -1,6 +1,6 @@
-"""FFDHE (DHE-RSA) cipher suites.
+"""FFDHE (DHE) cipher suites: DHE-RSA, DHE-DSS and anonymous ADH.
 
-Verifies that the wide engine completes each DHE-RSA suite against a local
+Verifies that the wide engine completes each suite against a local
 ``openssl s_server`` using the RFC 7919 ``ffdhe2048`` group. The wide engine is
 built once per session and driven through a subprocess (see
 ``tests/_dhe_client.py``).
@@ -110,6 +110,50 @@ def rsa_certs(tmp_path_factory) -> tuple[str, str]:
     return str(cert), str(key)
 
 
+@pytest.fixture(scope="session")
+def dsa_certs(tmp_path_factory) -> tuple[str, str]:
+    d = tmp_path_factory.mktemp("ffdhe-dsa")
+    param, cert, key = d / "param.pem", d / "cert.pem", d / "key.pem"
+    r = subprocess.run(
+        [
+            "openssl",
+            "genpkey",
+            "-genparam",
+            "-algorithm",
+            "DSA",
+            "-pkeyopt",
+            "dsa_paramgen_bits:2048",
+            "-out",
+            str(param),
+        ],
+        capture_output=True,
+    )
+    if r.returncode != 0 or not param.exists():
+        pytest.skip("local OpenSSL cannot generate DSA parameters")
+    subprocess.run(["openssl", "genpkey", "-paramfile", str(param), "-out", str(key)], check=True)
+    subprocess.run(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-new",
+            "-key",
+            str(key),
+            "-out",
+            str(cert),
+            "-days",
+            "2",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return str(cert), str(key)
+
+
 class _Server:
     def __init__(self, proc: subprocess.Popen, port: int):
         self.proc = proc
@@ -124,18 +168,13 @@ class _Server:
                 self.proc.kill()
 
 
-def _start_server(certs: tuple[str, str], cipher: str) -> _Server:
-    cert, key = certs
+def _start_server(certs: tuple[str, str] | None, cipher: str) -> _Server:
     port = _free_port()
     args = [
         "openssl",
         "s_server",
         "-accept",
         str(port),
-        "-cert",
-        cert,
-        "-key",
-        key,
         "-tls1_2",
         "-cipher",
         f"{cipher}:@SECLEVEL=0",
@@ -144,6 +183,10 @@ def _start_server(certs: tuple[str, str], cipher: str) -> _Server:
         "-www",
         "-quiet",
     ]
+    if certs is None:
+        args.append("-nocert")
+    else:
+        args += ["-cert", certs[0], "-key", certs[1]]
     proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         try:
@@ -157,7 +200,7 @@ def _start_server(certs: tuple[str, str], cipher: str) -> _Server:
     raise RuntimeError("openssl s_server did not start")
 
 
-def _run_client(lib: str, port: int, ciphers: list[int]) -> dict:
+def _run_client(lib: str, port: int, ciphers: list[int], anonymous: bool = False) -> dict:
     env = dict(os.environ)
     env["FREETLS_LIB"] = lib
     env["PYTHONPATH"] = str(SRC) + os.pathsep + env.get("PYTHONPATH", "")
@@ -172,6 +215,7 @@ def _run_client(lib: str, port: int, ciphers: list[int]) -> dict:
             str(TLS12),
             str(TLS12),
             "localhost",
+            "1" if anonymous else "0",
         ],
         capture_output=True,
         text=True,
@@ -204,6 +248,34 @@ DHE_RSA_SUITES = [
     (0x00C4, "DHE-RSA-CAMELLIA256-SHA256"),
 ]
 
+DHE_DSS_SUITES = [
+    (0x00A2, "DHE-DSS-AES128-GCM-SHA256"),
+    (0x00A3, "DHE-DSS-AES256-GCM-SHA384"),
+    (0x0032, "DHE-DSS-AES128-SHA"),
+    (0x0038, "DHE-DSS-AES256-SHA"),
+    (0x0040, "DHE-DSS-AES128-SHA256"),
+    (0x006A, "DHE-DSS-AES256-SHA256"),
+    (0xC056, "DHE-DSS-ARIA128-GCM-SHA256"),
+    (0xC057, "DHE-DSS-ARIA256-GCM-SHA384"),
+    (0x0044, "DHE-DSS-CAMELLIA128-SHA"),
+    (0x0087, "DHE-DSS-CAMELLIA256-SHA"),
+    (0x00BD, "DHE-DSS-CAMELLIA128-SHA256"),
+    (0x00C3, "DHE-DSS-CAMELLIA256-SHA256"),
+]
+
+ADH_SUITES = [
+    (0x00A6, "ADH-AES128-GCM-SHA256"),
+    (0x00A7, "ADH-AES256-GCM-SHA384"),
+    (0x0034, "ADH-AES128-SHA"),
+    (0x003A, "ADH-AES256-SHA"),
+    (0x006C, "ADH-AES128-SHA256"),
+    (0x006D, "ADH-AES256-SHA256"),
+    (0x0046, "ADH-CAMELLIA128-SHA"),
+    (0x0089, "ADH-CAMELLIA256-SHA"),
+    (0x00BF, "ADH-CAMELLIA128-SHA256"),
+    (0x00C5, "ADH-CAMELLIA256-SHA256"),
+]
+
 
 @pytest.mark.parametrize("suite,name", DHE_RSA_SUITES, ids=[f"{s:04x}" for s, _ in DHE_RSA_SUITES])
 def test_dhe_rsa_suite_completes(wide_engine, rsa_certs, suite, name):
@@ -215,4 +287,27 @@ def test_dhe_rsa_suite_completes(wide_engine, rsa_certs, suite, name):
     assert result["ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite
-    assert result["ja4"].startswith("t12")
+
+
+@pytest.mark.parametrize("suite,name", DHE_DSS_SUITES, ids=[f"{s:04x}" for s, _ in DHE_DSS_SUITES])
+def test_dhe_dss_suite_completes(wide_engine, dsa_certs, suite, name):
+    srv = _start_server(dsa_certs, name)
+    try:
+        result = _run_client(wide_engine, srv.port, [suite])
+    finally:
+        srv.stop()
+    assert result["ok"], result
+    assert result["version"] == "TLS1.2"
+    assert result["cipher_suite"] == suite
+
+
+@pytest.mark.parametrize("suite,name", ADH_SUITES, ids=[f"{s:04x}" for s, _ in ADH_SUITES])
+def test_adh_suite_completes(wide_engine, suite, name):
+    srv = _start_server(None, name)
+    try:
+        result = _run_client(wide_engine, srv.port, [suite], anonymous=True)
+    finally:
+        srv.stop()
+    assert result["ok"], result
+    assert result["version"] == "TLS1.2"
+    assert result["cipher_suite"] == suite

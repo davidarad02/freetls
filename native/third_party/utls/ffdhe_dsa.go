@@ -23,6 +23,23 @@ const (
 	dsaWithSHA256 SignatureScheme = 0x0402
 )
 
+// dsaTruncate returns the leftmost min(q bits, len(hashed)*8) bits of a digest,
+// as required by FIPS 186 for DSA. Go's crypto/dsa does not do this itself, so a
+// DSA key with a 224-bit q (common for 2048-bit DSA) would otherwise fail.
+func dsaTruncate(hashed []byte, q *big.Int) []byte {
+	qbits := q.BitLen()
+	if qbits >= len(hashed)*8 {
+		return hashed
+	}
+	n := (qbits + 7) / 8
+	out := make([]byte, n)
+	copy(out, hashed[:n])
+	if rem := qbits % 8; rem != 0 {
+		out[0] &= byte(0xff << (8 - rem))
+	}
+	return out
+}
+
 func verifyDSASignature(pub crypto.PublicKey, sigAlg SignatureScheme, signed, sig []byte) error {
 	dsaPub, ok := pub.(*dsa.PublicKey)
 	if !ok {
@@ -42,7 +59,7 @@ func verifyDSASignature(pub crypto.PublicKey, sigAlg SignatureScheme, signed, si
 	}
 	h := hashFunc.New()
 	h.Write(signed)
-	digest := h.Sum(nil)
+	digest := dsaTruncate(h.Sum(nil), dsaPub.Q)
 
 	var parsed struct{ R, S *big.Int }
 	if _, err := asn1.Unmarshal(sig, &parsed); err != nil {

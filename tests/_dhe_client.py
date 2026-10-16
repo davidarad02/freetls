@@ -1,11 +1,12 @@
 """Standalone DHE client, run as a subprocess by the FFDHE suite tests.
 
-Offers a DHE cipher suite together with the RFC 7919 ``ffdhe2048`` group so the
-server can complete a finite-field DH key exchange. Loads the wide engine via
-``FREETLS_LIB`` in a separate process (the cffi binding loads one engine per
-process).
+Offers a DHE/ADH cipher suite together with the RFC 7919 ``ffdhe2048`` group and
+(optionally) the DSA signature algorithms, so the server can complete a
+finite-field DH key exchange. ``anonymous=1`` sets ``FingerprintSpec.anonymous``
+for the ADH suites. Loads the wide engine via ``FREETLS_LIB`` in a separate
+process (the cffi binding loads one engine per process).
 
-Usage: python tests/_dhe_client.py <host> <port> <ciphers-hex-csv> <vmin> <vmax> <name>
+Usage: python tests/_dhe_client.py <host> <port> <ciphers-hex-csv> <vmin> <vmax> <name> <anonymous>
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import sys
 
 
 def main() -> int:
-    host, port, ciphers_csv, vmin, vmax, name = sys.argv[1:7]
+    host, port, ciphers_csv, vmin, vmax, name, anon = sys.argv[1:8]
     ciphers = [int(c, 16) for c in ciphers_csv.split(",") if c]
 
     import freetls
@@ -26,10 +27,14 @@ def main() -> int:
     spec = modes.specific(
         ciphers=ciphers,
         groups=[0x001D, 0x0017, 0x0018, 0x0100],  # include ffdhe2048
+        # include the DSA schemes so DHE-DSS can be negotiated
+        sigalgs=[0x0403, 0x0402, 0x0503, 0x0202, 0x0804, 0x0401, 0x0501, 0x0601],
         vers_min=int(vmin),
         vers_max=int(vmax),
         server_name=name or None,
     )
+    if anon == "1":
+        spec.anonymous = True
     out: dict[str, object] = {"ok": False}
     try:
         with TLSSession(spec) as s:

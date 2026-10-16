@@ -57,6 +57,8 @@ trap 'rm -rf "$STAGE"' EXIT
 for f in $OURS; do
     if [ -e "$FORK/$f" ]; then cp -a "$FORK/$f" "$STAGE/$f"; fi
 done
+# The patch set is ours too; preserve it across the re-copy.
+if [ -d "$FORK/patches" ]; then cp -a "$FORK/patches" "$STAGE/patches"; fi
 
 mkdir -p "$FORK"
 find "$FORK" -mindepth 1 -delete
@@ -71,6 +73,16 @@ for f in $OURS; do
     fi
 done
 echo "[rebase] restored our files:$RESTORED"
+
+# Re-apply our patches to the upstream files (new-files-only + patches).
+if [ -d "$STAGE/patches" ]; then
+    cp -a "$STAGE/patches" "$FORK/patches"
+    for p in "$FORK"/patches/*.patch; do
+        [ -e "$p" ] || continue
+        echo "[rebase] applying $(basename "$p")"
+        (cd "$FORK" && patch -p1 --forward < "$p")
+    done
+fi
 
 echo "[rebase] rebuilding native engine"
 (cd "$NATIVE" && CGO_ENABLED=1 "$GO" build -buildmode=c-shared -o libfreetls.so .)

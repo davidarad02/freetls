@@ -222,6 +222,9 @@ class FingerprintSpec:
     verify: bool | None = None
     # None => use the library default (unsafe). See set_safe_mode().
     safe: bool | None = None
+    # Permit anonymous (ADH) cipher suites, which provide no server
+    # authentication. Off by default.
+    anonymous: bool = False
     root_ca: str | None = None
     timeout_ms: int = 30000
 
@@ -272,6 +275,7 @@ class FingerprintSpec:
             "vers_max": self.vers_max,
             "server_name": self.server_name or "",
             "verify": self.verify,
+            "anonymous": self.anonymous,
             "root_ca": self.root_ca or "",
             "timeout_ms": self.timeout_ms,
             "extensions": [e.to_engine() for e in self.extensions],
@@ -332,6 +336,7 @@ class FingerprintSpec:
             server_name=self.server_name,
             verify=self.verify,
             safe=self.safe,
+            anonymous=self.anonymous,
             root_ca=self.root_ca,
             timeout_ms=self.timeout_ms,
             check_hostname=self.check_hostname,

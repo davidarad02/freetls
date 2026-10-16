@@ -45,6 +45,19 @@ const (
 	tlsDHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00c4
 	tlsDHE_DSS_WITH_CAMELLIA_128_CBC_SHA256 uint16 = 0x00bd
 	tlsDHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00c3
+
+	// Anonymous DH (ADH).
+	tlsDH_anon_WITH_AES_128_GCM_SHA256 uint16 = 0x00a6
+	tlsDH_anon_WITH_AES_256_GCM_SHA384 uint16 = 0x00a7
+	tlsDH_anon_WITH_AES_128_CBC_SHA    uint16 = 0x0034
+	tlsDH_anon_WITH_AES_256_CBC_SHA    uint16 = 0x003a
+	tlsDH_anon_WITH_AES_128_CBC_SHA256 uint16 = 0x006c
+	tlsDH_anon_WITH_AES_256_CBC_SHA256 uint16 = 0x006d
+
+	tlsDH_anon_WITH_CAMELLIA_128_CBC_SHA    uint16 = 0x0046
+	tlsDH_anon_WITH_CAMELLIA_256_CBC_SHA    uint16 = 0x0089
+	tlsDH_anon_WITH_CAMELLIA_128_CBC_SHA256 uint16 = 0x00bf
+	tlsDH_anon_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00c5
 )
 
 // ffdheGoSuites are the DHE suites using Go-native symmetric ciphers.
@@ -64,6 +77,13 @@ var ffdheGoSuites = []*cipherSuite{
 	{tlsDHE_DSS_WITH_AES_256_CBC_SHA, 32, 20, 16, dhDSSKA, 0, cipherAES, macSHA1, nil},
 	{tlsDHE_DSS_WITH_AES_128_CBC_SHA256, 16, 32, 16, dhDSSKA, suiteTLS12, cipherAES, macSHA256, nil},
 	{tlsDHE_DSS_WITH_AES_256_CBC_SHA256, 32, 32, 16, dhDSSKA, suiteTLS12, cipherAES, macSHA256, nil},
+	// Anonymous DH
+	{tlsDH_anon_WITH_AES_128_GCM_SHA256, 16, 0, 4, dhAnonKA, suiteTLS12, nil, nil, aeadAESGCM},
+	{tlsDH_anon_WITH_AES_256_GCM_SHA384, 32, 0, 4, dhAnonKA, suiteTLS12 | suiteSHA384, nil, nil, aeadAESGCM},
+	{tlsDH_anon_WITH_AES_128_CBC_SHA, 16, 20, 16, dhAnonKA, 0, cipherAES, macSHA1, nil},
+	{tlsDH_anon_WITH_AES_256_CBC_SHA, 32, 20, 16, dhAnonKA, 0, cipherAES, macSHA1, nil},
+	{tlsDH_anon_WITH_AES_128_CBC_SHA256, 16, 32, 16, dhAnonKA, suiteTLS12, cipherAES, macSHA256, nil},
+	{tlsDH_anon_WITH_AES_256_CBC_SHA256, 32, 32, 16, dhAnonKA, suiteTLS12, cipherAES, macSHA256, nil},
 }
 
 // registerFFDHESuites appends suites to the canonical list and the supported

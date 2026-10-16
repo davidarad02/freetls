@@ -31,6 +31,11 @@ var ffdheEVPSuites = []*cipherSuite{
 	{tlsDHE_DSS_WITH_CAMELLIA_256_CBC_SHA, 32, 20, 16, dhDSSKA, 0, evpCBC("CAMELLIA-256-ECB"), macSHA1, nil},
 	{tlsDHE_DSS_WITH_CAMELLIA_128_CBC_SHA256, 16, 32, 16, dhDSSKA, suiteTLS12, evpCBC("CAMELLIA-128-ECB"), macSHA256, nil},
 	{tlsDHE_DSS_WITH_CAMELLIA_256_CBC_SHA256, 32, 32, 16, dhDSSKA, suiteTLS12, evpCBC("CAMELLIA-256-ECB"), macSHA256, nil},
+	// Anonymous DH Camellia-CBC
+	{tlsDH_anon_WITH_CAMELLIA_128_CBC_SHA, 16, 20, 16, dhAnonKA, 0, evpCBC("CAMELLIA-128-ECB"), macSHA1, nil},
+	{tlsDH_anon_WITH_CAMELLIA_256_CBC_SHA, 32, 20, 16, dhAnonKA, 0, evpCBC("CAMELLIA-256-ECB"), macSHA1, nil},
+	{tlsDH_anon_WITH_CAMELLIA_128_CBC_SHA256, 16, 32, 16, dhAnonKA, suiteTLS12, evpCBC("CAMELLIA-128-ECB"), macSHA256, nil},
+	{tlsDH_anon_WITH_CAMELLIA_256_CBC_SHA256, 32, 32, 16, dhAnonKA, suiteTLS12, evpCBC("CAMELLIA-256-ECB"), macSHA256, nil},
 }
 
 func init() {

@@ -71,6 +71,8 @@ type specJSON struct {
 	Verify     bool   `json:"verify"`
 	RootCA     string `json:"root_ca,omitempty"`
 	ServerName string `json:"server_name,omitempty"`
+	// Anonymous permits anonymous (ADH) cipher suites (no server auth).
+	Anonymous bool `json:"anonymous,omitempty"`
 
 	// Certificate suite options.
 	CheckHostname *bool    `json:"check_hostname,omitempty"` // default true
@@ -367,7 +369,7 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 		systemRoots = *s.SystemRoots
 	}
 
-	cfg := &utls.Config{ServerName: s.ServerName}
+	cfg := &utls.Config{ServerName: s.ServerName, Anonymous: s.Anonymous}
 	// With HelloCustom uTLS refuses to handshake if resumption is enabled but
 	// no ticket/PSK extension is present. This lets a spec opt out cleanly.
 	cfg.PreferSkipResumptionOnNilExtension = true

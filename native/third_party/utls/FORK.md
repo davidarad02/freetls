@@ -8,10 +8,11 @@ can add cipher suites backed by OpenSSL `libcrypto` without patching upstream.
 - `native/go.mod` maps it here with:
   `replace github.com/refraction-networking/utls => ./third_party/utls`
 
-## What we add (new files only)
+## What we add
 
-All freetls changes are **new files** in the `tls` package; upstream files are
-never edited. This keeps the diff rebasable (see `tools/rebase_utls.sh`).
+freetls changes are **new files** in the `tls` package, plus a small, documented
+**patch set** (`patches/`) for the few behaviours that cannot be added from a new
+file (see below). Both are rebasable (see `tools/rebase_utls.sh`).
 
 | File | Purpose |
 |---|---|
@@ -31,6 +32,16 @@ never edited. This keeps the diff rebasable (see `tools/rebase_utls.sh`).
 
 `FORK.md` is also ours.
 
+## Patches (upstream files)
+
+A few behaviours cannot be added from a new file, so `patches/freetls.patch`
+edits upstream files; `tools/rebase_utls.sh` re-applies it after each re-copy:
+
+- `handshake_client.go`: allow `*dsa.PublicKey` server certificates (DHE-DSS);
+  skip the Certificate message + `verifyServerCertificate` for anonymous (ADH)
+  suites and gate them behind `Config.Anonymous`.
+- `common.go`: add `Config.Anonymous`.
+
 ## Registration rules (do not break these)
 
 `utlsSupportedCipherSuites` is built in `u_common.go`'s `init()` and reassigned
@@ -43,4 +54,5 @@ are byte-identical. TLS 1.3 suites go into `cipherSuitesTLS13`.
 ## Rebase
 
 Run `tools/rebase_utls.sh` to re-copy the upstream module at the version pinned
-in `native/go.mod`, restore our new files, and rebuild.
+in `native/go.mod`, restore our new files, re-apply `patches/*.patch`, and
+rebuild.
