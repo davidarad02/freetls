@@ -32,6 +32,7 @@ class Ja4HTTPSConnection(HTTPSConnection):
 
     _spec_factory: Callable[[], FingerprintSpec] = NotImplemented
     _on_session: Callable[[TLSSession | QUICSession], None] | None = None
+    _on_request: Callable[[str], None] | None = None
     _http3: bool = False
     ja4_session: TLSSession | QUICSession | None = None
 
@@ -91,6 +92,17 @@ class Ja4HTTPSConnection(HTTPSConnection):
     def request(self, method, url, body=None, headers=None, **kwargs):  # type: ignore[override]
         if self.sock is None:
             self.connect()
+        if self._on_request is not None:
+            try:
+                from ..fingerprint import ja4h_from_request
+
+                pairs = list(headers.items()) if headers is not None else []
+                version = (
+                    "HTTP/3" if self._http3 else ("HTTP/2" if self._h2_enabled() else "HTTP/1.1")
+                )
+                self._on_request(ja4h_from_request(method, pairs, version=version)["ja4h"])
+            except Exception:  # noqa: BLE001 - JA4H reporting must never break a request
+                pass
         if self._http3:
             self._h3_req = (method, url, body, headers)
             return
@@ -171,12 +183,14 @@ def make_pool_manager(
     spec_factory: Callable[[], FingerprintSpec],
     on_session: Callable[[TLSSession | QUICSession], None] | None = None,
     http3: bool = False,
+    on_request: Callable[[str], None] | None = None,
 ) -> type[PoolManager]:
     """Return a PoolManager subclass whose HTTPS pools use the freetls engine."""
 
     class _Conn(Ja4HTTPSConnection):
         _spec_factory = staticmethod(spec_factory)
         _on_session = staticmethod(on_session) if on_session else None
+        _on_request = staticmethod(on_request) if on_request else None
         _http3 = http3
 
     class _Pool(Ja4HTTPSConnectionPool):

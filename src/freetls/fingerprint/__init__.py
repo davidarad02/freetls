@@ -6,7 +6,8 @@ packets so a ClientHello carried over QUIC can be fingerprinted (JA4q/JA4Sq).
 """
 
 from .chlo import chlo_json_from_raw
-from .ja3 import ja3_from_bytes, ja3_string, to_ja3
+from .h2 import akamai_h2_fingerprint
+from .ja3 import ja3_from_bytes, ja3_string, ja3n_from_bytes, ja3n_string, to_ja3, to_ja3n
 from .ja4 import first_last_alpn, ja4_from_bytes, ja4_from_spec, to_ja4
 from .ja4h import ja4h, ja4h_from_request
 from .ja4l import ja4l, ja4l_c, ja4l_s
@@ -36,6 +37,10 @@ __all__ = [
     "is_grease_transport_parameter",
     "to_ja4",
     "to_ja3",
+    "to_ja3n",
+    "ja3n_from_bytes",
+    "ja3n_string",
+    "akamai_h2_fingerprint",
     "to_ja4s",
     "ja4_from_bytes",
     "ja4_from_spec",

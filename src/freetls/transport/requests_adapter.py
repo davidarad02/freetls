@@ -33,6 +33,7 @@ class JA4Adapter(HTTPAdapter):
         self._spec_factory = spec_factory
         self._http3 = http3
         self._last_session = None
+        self._last_ja4h: str | None = None
         super().__init__(**kwargs)
 
     def _factory(self) -> FingerprintSpec:
@@ -43,9 +44,15 @@ class JA4Adapter(HTTPAdapter):
     def _record_session(self, session) -> None:
         self._last_session = session
 
+    def _record_ja4h(self, ja4h: str) -> None:
+        self._last_ja4h = ja4h
+
     def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
         manager_cls = make_pool_manager(
-            self._factory, on_session=self._record_session, http3=self._http3
+            self._factory,
+            on_session=self._record_session,
+            http3=self._http3,
+            on_request=self._record_ja4h,
         )
         self.poolmanager = manager_cls(
             num_pools=connections,
@@ -76,6 +83,11 @@ class JA4Adapter(HTTPAdapter):
         if s is None:
             return None
         return getattr(s, "ja4s", None) or getattr(s, "ja4sq", None)
+
+    @property
+    def last_ja4h(self) -> str | None:
+        """The JA4H of the most recent request (all HTTP versions)."""
+        return self._last_ja4h
 
     def cert_verify(self, conn, url, verify, cert) -> None:
         # Certificate verification is delegated to the native engine.

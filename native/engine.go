@@ -98,6 +98,11 @@ type specJSON struct {
 	// process-wide LRU session cache (TLS 1.2 tickets and TLS 1.3 PSKs).
 	SessionCache int `json:"session_cache,omitempty"`
 
+	// Keylog, when set, is a path that receives TLS secrets in NSS key-log
+	// format (the SSLKEYLOGFILE format). Security-sensitive: it exposes the
+	// session keys.
+	Keylog string `json:"keylog,omitempty"`
+
 	// QUIC / HTTP-3. Transport=="quic" marks the spec as a QUIC Initial flight;
 	// QuicID selects a built-in uQUIC preset instead of the explicit extensions.
 	Transport     string           `json:"transport,omitempty"`
@@ -217,6 +222,7 @@ type session struct {
 	quicSH    []byte
 	quicEarly bool
 	quicDgram bool
+	keylog    *os.File
 }
 
 var (
@@ -951,6 +957,15 @@ func freetls_session_new(specJSON *C.char) (id C.longlong) {
 	if s.TimeoutMS > 0 {
 		sess.timeout = time.Duration(s.TimeoutMS) * time.Millisecond
 	}
+	if s.Keylog != "" {
+		f, err := os.OpenFile(s.Keylog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			auxErr = fmt.Sprintf("open keylog: %v", err)
+			return 0
+		}
+		cfg.KeyLogWriter = f
+		sess.keylog = f
+	}
 	id = C.longlong(putSession(sess))
 	return id
 }
@@ -979,6 +994,9 @@ func freetls_session_free(h C.longlong) {
 		_ = s.raw.Close()
 	}
 	closeQUIC(s)
+	if s.keylog != nil {
+		_ = s.keylog.Close()
+	}
 }
 
 // freetls_handshake performs the TLS handshake over an already-connected fd.

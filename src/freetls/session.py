@@ -8,7 +8,7 @@ import socket
 
 from .engine import EngineSession, EngineState
 from .errors import FreeTLSError, HandshakeError, SpecError
-from .fingerprint import ja3_from_bytes, ja4_from_bytes, ja4s_from_bytes
+from .fingerprint import ja3_from_bytes, ja3n_from_bytes, ja4_from_bytes, ja4s_from_bytes
 from .model import FingerprintSpec
 
 _VERSION_STR = {"TLS1.3": "TLSv1.3", "TLS1.2": "TLSv1.2", "TLS1.1": "TLSv1.1", "TLS1.0": "TLSv1"}
@@ -294,8 +294,13 @@ class TLSSession:
             resp["body"] = base64.b64decode(resp["body_b64"])
         else:
             resp["body"] = b""
-        from .fingerprint import ja4h_from_request
+        from .fingerprint import akamai_h2_fingerprint, ja4h_from_request
 
+        resp["akamai_h2"] = akamai_h2_fingerprint(
+            resp.get("sent_settings", []),
+            resp.get("sent_window_update", 0),
+            resp.get("sent_pseudo_header_order"),
+        )
         resp.update(ja4h_from_request(method, headers or [], version="HTTP/2"))
         return resp
 
@@ -306,6 +311,7 @@ class TLSSession:
             if self._client_hello:
                 fp.update(ja4_from_bytes(self._client_hello))
                 fp.update(ja3_from_bytes(self._client_hello))
+                fp.update(ja3n_from_bytes(self._client_hello))
             if self._server_hello:
                 fp.update(ja4s_from_bytes(self._server_hello))
             self._fp = fp
@@ -322,6 +328,10 @@ class TLSSession:
     @property
     def ja3(self) -> str | None:
         return self.fingerprints.get("ja3")
+
+    @property
+    def ja3n(self) -> str | None:
+        return self.fingerprints.get("ja3n")
 
     @property
     def ja4s(self) -> str | None:

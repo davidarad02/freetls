@@ -432,6 +432,9 @@ class FingerprintSpec:
     # Enable TLS resumption through the shared engine session cache (capacity).
     # None/0 disables resumption.
     session_cache: int | None = None
+    # Path to append TLS secrets to in NSS key-log format (SSLKEYLOGFILE).
+    # Security-sensitive.
+    keylog: str | None = None
 
     # Built-in uTLS preset (used instead of ciphers/extensions when set).
     preset: str | None = None
@@ -517,6 +520,8 @@ class FingerprintSpec:
             out["compression"] = list(self.compression)
         if self.session_cache:
             out["session_cache"] = int(self.session_cache)
+        if self.keylog:
+            out["keylog"] = self.keylog
         if self.quic is not None:
             out["transport"] = "quic"
             out["quic"] = self.quic.to_engine()
@@ -569,6 +574,7 @@ class FingerprintSpec:
             pinned_sha256=None if self.pinned_sha256 is None else list(self.pinned_sha256),
             compression=None if self.compression is None else list(self.compression),
             session_cache=self.session_cache,
+            keylog=self.keylog,
             preset=self.preset,
             preset_no_sni=self.preset_no_sni,
             preset_alpn=None if self.preset_alpn is None else list(self.preset_alpn),

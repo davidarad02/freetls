@@ -119,3 +119,19 @@ def test_parse_client_hello_truncated_raises_parse_error():
     raw = bytes([0x01, 0x00, 0x00, 0x22]) + bytes(0x22)  # 34-byte body, no room for fields
     with pytest.raises(ParseError):
         parse_client_hello(raw)
+
+
+def test_ja3n_is_order_independent():
+    """JA3N sorts ciphers/extensions, so shuffling does not change it (JA3 does)."""
+    from freetls.fingerprint import ja3n_from_bytes
+
+    a = B.build_client_hello(
+        [0x1301, 0xC02B],
+        [B.sni_ext("x"), B.supported_versions_ext(0x0304), B.alpn_ext("h2")],
+    )
+    b = B.build_client_hello(
+        [0xC02B, 0x1301],
+        [B.alpn_ext("h2"), B.supported_versions_ext(0x0304), B.sni_ext("x")],
+    )
+    assert ja3n_from_bytes(a)["ja3n"] == ja3n_from_bytes(b)["ja3n"]
+    assert ja3_from_bytes(a)["ja3"] != ja3_from_bytes(b)["ja3"]

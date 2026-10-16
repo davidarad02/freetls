@@ -32,3 +32,26 @@ def to_ja3(ch: ClientHello) -> dict:
 
 def ja3_from_bytes(raw_client_hello: bytes) -> dict:
     return to_ja3(parse_client_hello(raw_client_hello))
+
+
+def ja3n_string(ch: ClientHello) -> str:
+    """The JA3 string with the cipher and extension lists sorted.
+
+    ``JA3N`` is the order-independent variant of JA3: it is stable across the
+    extension/cipher shuffling that modern browsers do (which changes JA3).
+    """
+    version = str(ch.legacy_version)
+    ciphers = _dec_join(sorted(ch.ciphers))
+    extensions = _dec_join(sorted(ch.ext_types))
+    curves = _dec_join(ch.supported_groups)
+    points = _dec_join(ch.ec_point_formats)
+    return f"{version},{ciphers},{extensions},{curves},{points}"
+
+
+def to_ja3n(ch: ClientHello) -> dict:
+    s = ja3n_string(ch)
+    return {"ja3n": md5(s.encode("utf8")).hexdigest(), "ja3n_string": s}
+
+
+def ja3n_from_bytes(raw_client_hello: bytes) -> dict:
+    return to_ja3n(parse_client_hello(raw_client_hello))

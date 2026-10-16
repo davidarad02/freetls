@@ -269,6 +269,7 @@ def test_requests_http3_adapter(h3_server):
     assert b"hello-h3" in resp.content
     assert adapter.last_ja4 is not None and adapter.last_ja4.startswith("q")
     assert adapter.last_ja4s is not None and adapter.last_ja4s.startswith("q")
+    assert adapter.last_ja4h is not None and adapter.last_ja4h.startswith("ge30")
 
 
 def test_requests_http3_forwards_headers(h3_server):

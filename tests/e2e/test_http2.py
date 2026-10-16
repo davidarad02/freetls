@@ -47,6 +47,7 @@ def test_h2_forwards_request_headers(go_server):
         assert r.status_code == 200
         assert r.headers.get("x-echo-x-test") == "abc"
         assert r.headers.get("x-echo-x-two") == "def"
+        assert adapter.last_ja4h is not None and adapter.last_ja4h.startswith("ge20")
     finally:
         session.close()
 
@@ -78,6 +79,13 @@ def test_h2_large_body_is_split(go_server):
         r = s.h2_request("/echo-body", method="POST", body=b"x" * 200_000)
     assert r["status"] == 200
     assert r["body"] == b"len=200000"
+
+
+def test_h2_akamai_fingerprint(go_server):
+    """The Akamai HTTP/2 fingerprint is computed from the wire parameters."""
+    with _connect(go_server.port, _h2_spec()) as s:
+        r = s.h2_request("/")
+    assert r["akamai_h2"] == "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
 
 
 def test_h2_settings_reported(go_server):
