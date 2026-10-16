@@ -23,10 +23,16 @@ _HOP_BY_HOP = {
 
 def negotiated_h2(session) -> bool:
     """True when the connection negotiated HTTP/2 via ALPN."""
+    return negotiated_protocol(session) == "h2"
+
+
+def negotiated_protocol(session) -> str | None:
+    """Return ``"h3"``, ``"h2"`` or ``None`` for the session's ALPN."""
     try:
-        return session.selected_alpn_protocol() == "h2"
+        alpn = session.selected_alpn_protocol()
     except Exception:  # noqa: BLE001
-        return False
+        return None
+    return alpn if alpn in ("h3", "h2") else None
 
 
 def execute(

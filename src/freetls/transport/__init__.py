@@ -20,6 +20,7 @@ _LAZY_SUBMODULES = {
     "retry",
     "proxy",
     "_http2",
+    "_http3",
     "_content",
 }
 

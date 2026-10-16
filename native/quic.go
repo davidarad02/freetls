@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	quic "github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/http3"
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -52,10 +54,21 @@ type quicInitialJSON struct {
 
 // quicState holds the live QUIC resources for a session.
 type quicState struct {
-	pc   net.PacketConn
-	tr   *quic.UTransport
-	conn *quic.Conn
-	spec *quic.QUICSpec
+	pc        net.PacketConn
+	tr        *quic.UTransport
+	conn      *quic.Conn
+	spec      *quic.QUICSpec
+	remote    net.Addr
+	datagrams bool
+	// cc is the HTTP/3 client connection, built lazily on the first request. It
+	// owns every stream (requests and datagrams) over this session's single QUIC
+	// connection, so there is exactly one quic.Transport/PacketConn.
+	cc     *http3.ClientConn
+	ccOnce sync.Once
+	// dg holds the request streams opened for RFC 9297 datagram flows, keyed by
+	// their stream ID.
+	dgMu sync.Mutex
+	dg   map[quic.StreamID]*http3.RequestStream
 }
 
 func hexOrEmpty(s string) ([]byte, error) {
@@ -240,6 +253,14 @@ func closeQUIC(s *session) {
 	s.quic = nil
 }
 
+// quicAuthority returns the peer's host:port for the :authority pseudo-header.
+func (s *session) quicAuthority() string {
+	if s == nil || s.quic == nil || s.quic.remote == nil {
+		return ""
+	}
+	return s.quic.remote.String()
+}
+
 // quicRemoteAddr builds the peer address. Python resolves the host and passes
 // the literal IP, so no name resolution happens here.
 //
@@ -294,6 +315,41 @@ func ensureInitialSourceCID(spec *quic.QUICSpec) error {
 	return errors.New("quic ClientHello must contain a quic_transport_parameters extension")
 }
 
+// ensureMaxDatagramFrameSize guarantees the ClientHello's QUIC transport
+// parameters advertise max_datagram_frame_size (0x20) when HTTP/3 datagrams are
+// enabled.
+//
+// uQUIC takes the transport parameters from the ClientHelloSpec, so setting
+// quic.Config.EnableDatagrams is not enough: without this parameter on the wire
+// the peer sees a client that does not support QUIC datagrams and closes the
+// connection with "missing QUIC Datagram support" (HTTP/3 SETTINGS error).
+// Like initial_source_connection_id it lives inside extension 57, so it does not
+// change JA4q.
+func ensureMaxDatagramFrameSize(spec *quic.QUICSpec) error {
+	if spec.ClientHelloSpec == nil {
+		return errors.New("quic spec requires a ClientHello")
+	}
+	for _, e := range spec.ClientHelloSpec.Extensions {
+		qtp, ok := e.(*utls.QUICTransportParametersExtension)
+		if !ok {
+			continue
+		}
+		for _, p := range qtp.TransportParameters {
+			if _, ok := p.(utls.MaxDatagramFrameSize); ok {
+				return nil
+			}
+		}
+		for _, id := range spec.SuppressTransportParameters {
+			if id == 0x20 {
+				return nil
+			}
+		}
+		qtp.TransportParameters = append(qtp.TransportParameters, utls.MaxDatagramFrameSize(65536))
+		return nil
+	}
+	return errors.New("quic ClientHello must contain a quic_transport_parameters extension")
+}
+
 // quicSpecFor returns the uQUIC spec for the session: a built-in preset (whose
 // Initial flight is part of the fingerprint, so only explicit overrides replace
 // it), or one assembled from the session's own ClientHello plus Initial shape.
@@ -329,6 +385,11 @@ func quicSpecFor(s *session) (*quic.QUICSpec, error) {
 	}
 	if err := ensureInitialSourceCID(spec); err != nil {
 		return nil, err
+	}
+	if s.quicDgram {
+		if err := ensureMaxDatagramFrameSize(spec); err != nil {
+			return nil, err
+		}
 	}
 	return spec, nil
 }
@@ -392,13 +453,13 @@ func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, p
 	defer cancel()
 
 	tr := &quic.UTransport{Transport: &quic.Transport{Conn: pc}, QUICSpec: qspec}
-	conn, err := dialQUIC(ctx, tr, remote, s.config, pc)
+	conn, err := dialQUIC(ctx, tr, remote, s.config, pc, &quic.Config{EnableDatagrams: s.quicDgram})
 	if err != nil {
 		_ = pc.Close()
 		cErr(s, err)
 		return -8
 	}
-	s.quic = &quicState{pc: pc, tr: tr, conn: conn, spec: qspec}
+	s.quic = &quicState{pc: pc, tr: tr, conn: conn, spec: qspec, remote: remote, datagrams: s.quicDgram}
 	s.quicSH = conn.FreetlsServerHello()
 	return 0
 }
@@ -414,15 +475,19 @@ const defaultQUICTimeout = 30 * time.Second
 // The engine therefore enforces the deadline itself and closes the socket to
 // release the dial. Reported upstream behaviour is otherwise unchanged.
 func dialQUIC(
-	ctx context.Context, tr *quic.UTransport, remote net.Addr, cfg *utls.Config, pc net.PacketConn,
+	ctx context.Context, tr *quic.UTransport, remote net.Addr, cfg *utls.Config,
+	pc net.PacketConn, qcfg *quic.Config,
 ) (*quic.Conn, error) {
 	type result struct {
 		conn *quic.Conn
 		err  error
 	}
+	if qcfg == nil {
+		qcfg = &quic.Config{}
+	}
 	resc := make(chan result, 1)
 	go func() {
-		c, err := tr.Dial(ctx, remote, cfg, &quic.Config{})
+		c, err := tr.Dial(ctx, remote, cfg, qcfg)
 		resc <- result{c, err}
 	}()
 	select {

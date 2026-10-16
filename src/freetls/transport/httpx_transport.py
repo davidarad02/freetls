@@ -16,8 +16,9 @@ from typing import Callable
 import httpx
 
 from ..model import FingerprintSpec
+from ..quic import QUICSession
 from ..session import TLSSession
-from . import _http2
+from . import _http2, _http3
 
 _CHUNK = 65536
 
@@ -47,13 +48,37 @@ class _Reader:
 
 
 def _open(
-    request: httpx.Request, spec: FingerprintSpec, proxy: str | None = None
-) -> tuple[TLSSession, int, list, bytes, str, _Reader]:
+    request: httpx.Request,
+    spec: FingerprintSpec,
+    proxy: str | None = None,
+    http3: bool = False,
+) -> tuple[TLSSession | QUICSession, int, list, bytes, str, _Reader]:
     url = request.url
     host = url.host
     port = url.port or 443
     if url.scheme != "https":
         raise httpx.UnsupportedProtocol(f"freetls only supports https, got {url.scheme}")
+    path = url.raw_path.decode("latin-1") or "/"
+    headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in request.headers.raw}
+    headers.setdefault("Host", url.netloc.decode("latin-1"))
+    body = request.read()
+
+    if http3:
+        if proxy:
+            raise httpx.UnsupportedProtocol("HTTP/3 over a proxy is not supported")
+        session: TLSSession | QUICSession = QUICSession(spec)
+        session.connect(host, port, server_hostname=spec.server_name or host)
+        resp = _http3.execute(session, request.method, path, headers, body)
+        reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
+        return (
+            session,
+            _http3.status_of(resp),
+            _http3.header_tuples(resp),
+            b"",
+            "HTTP/3",
+            reader,
+        )
+
     session = TLSSession(spec)
     if proxy:
         from .proxy import open_tunnel
@@ -62,10 +87,6 @@ def _open(
         session.wrap_socket(sock, server_hostname=spec.server_name or host)
     else:
         session.connect(host, port, server_hostname=spec.server_name or host)
-    path = url.raw_path.decode("latin-1") or "/"
-    headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in request.headers.raw}
-    headers.setdefault("Host", url.netloc.decode("latin-1"))
-    body = request.read()
 
     if _http2.negotiated_h2(session):
         resp = _http2.execute(session, request.method, path, headers, body)
@@ -136,15 +157,15 @@ class _AsyncBodyStream(httpx.AsyncByteStream):
 
 
 def _extensions(version: str) -> dict:
-    return {"http_version": b"HTTP/2" if version == "HTTP/2" else b"HTTP/1.1"}
+    mapping = {"HTTP/3": b"HTTP/3", "HTTP/2": b"HTTP/2"}
+    return {"http_version": mapping.get(version, b"HTTP/1.1")}
 
 
 def _ja4h(request: httpx.Request, version: str) -> str:
     from ..fingerprint import ja4h_from_request
 
     pairs = [(k.decode("latin-1"), v.decode("latin-1")) for k, v in request.headers.raw]
-    v = "HTTP/2" if version == "HTTP/2" else "HTTP/1.1"
-    return ja4h_from_request(request.method, pairs, version=v)["ja4h"]
+    return ja4h_from_request(request.method, pairs, version=version)["ja4h"]
 
 
 class FreeTLSTransport(httpx.BaseTransport):
@@ -159,13 +180,15 @@ class FreeTLSTransport(httpx.BaseTransport):
         spec: FingerprintSpec | None = None,
         spec_factory: Callable[[], FingerprintSpec] | None = None,
         proxy: str | None = None,
+        http3: bool = False,
     ):
         if spec is None and spec_factory is None:
             raise ValueError("FreeTLSTransport requires spec= or spec_factory=")
         self._spec = spec
         self._spec_factory = spec_factory
         self._proxy = proxy
-        self.last_session: TLSSession | None = None
+        self._http3 = http3
+        self.last_session: TLSSession | QUICSession | None = None
         self.last_http_version: str | None = None
         self.last_ja4h: str | None = None
 
@@ -177,7 +200,7 @@ class FreeTLSTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         session, status, headers, _unused, version, reader = _open(
-            request, self._factory(), self._proxy
+            request, self._factory(), self._proxy, self._http3
         )
         self.last_session = session
         self.last_http_version = version
@@ -207,16 +230,19 @@ class AsyncFreeTLSTransport(httpx.AsyncBaseTransport):
         spec: FingerprintSpec | None = None,
         spec_factory: Callable[[], FingerprintSpec] | None = None,
         proxy: str | None = None,
+        http3: bool = False,
     ):
-        self._sync = FreeTLSTransport(spec=spec, spec_factory=spec_factory, proxy=proxy)
-        self.last_session: TLSSession | None = None
+        self._sync = FreeTLSTransport(
+            spec=spec, spec_factory=spec_factory, proxy=proxy, http3=http3
+        )
+        self.last_session: TLSSession | QUICSession | None = None
         self.last_http_version: str | None = None
         self.last_ja4h: str | None = None
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         loop = asyncio.get_running_loop()
         session, status, headers, _unused, version, reader = await loop.run_in_executor(
-            None, _open, request, self._sync._factory(), self._sync._proxy
+            None, _open, request, self._sync._factory(), self._sync._proxy, self._sync._http3
         )
         self.last_session = session
         self.last_http_version = version

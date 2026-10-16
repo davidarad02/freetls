@@ -38,6 +38,10 @@ char *freetls_chlo_raw(const char *);
 char *freetls_aux_error(void);
 char *freetls_preset_list(void);
 char *freetls_h2_request(long long, const char *);
+char *freetls_h3_request(long long, const char *);
+char *freetls_h3_datagram_open(long long, const char *);
+char *freetls_h3_datagram_send(long long, long long, const char *);
+char *freetls_h3_datagram_recv(long long, long long, int);
 char *freetls_supported_ciphers(void);
 char *freetls_supported_extensions(void);
 char *freetls_spec_raw(const char *);
@@ -517,6 +521,34 @@ class EngineSession:
         """Perform an HTTP/2 request with full fingerprint control."""
         payload = json.dumps(req).encode()
         raw = _cstr(self._lib.freetls_h2_request(self._handle, payload), self._engine)
+        return json.loads(raw or "{}")
+
+    def h3_request(self, req: dict) -> dict:
+        """Perform an HTTP/3 request over the session's QUIC connection."""
+        payload = json.dumps(req).encode()
+        raw = _cstr(self._lib.freetls_h3_request(self._handle, payload), self._engine)
+        return json.loads(raw or "{}")
+
+    def h3_datagram_open(self, req: dict) -> dict:
+        """Open an RFC 9297 datagram flow; returns ``{"flow": id}``."""
+        payload = json.dumps(req).encode()
+        raw = _cstr(self._lib.freetls_h3_datagram_open(self._handle, payload), self._engine)
+        return json.loads(raw or "{}")
+
+    def h3_datagram_send(self, flow: int, data: bytes) -> dict:
+        import base64
+
+        payload = base64.b64encode(data).decode().encode()
+        raw = _cstr(
+            self._lib.freetls_h3_datagram_send(self._handle, int(flow), payload), self._engine
+        )
+        return json.loads(raw or "{}")
+
+    def h3_datagram_recv(self, flow: int, timeout_ms: int = 0) -> dict:
+        raw = _cstr(
+            self._lib.freetls_h3_datagram_recv(self._handle, int(flow), int(timeout_ms)),
+            self._engine,
+        )
         return json.loads(raw or "{}")
 
     def close(self) -> None:

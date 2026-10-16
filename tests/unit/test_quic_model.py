@@ -110,6 +110,13 @@ def test_quic_id_alone_marks_transport():
     assert engine_json["quic_id"] == "QUICFirefox_116"
 
 
+def test_quic_datagrams_serialise_and_copy():
+    spec = _spec(quic_datagrams=True)
+    assert spec.to_engine()["quic_datagrams"] is True
+    assert spec.copy().quic_datagrams is True
+    assert "quic_datagrams" not in _spec().to_engine()
+
+
 def test_safe_mode_whitelists_transport_parameters():
     assert 0x0039 in engine.supported_extensions()
 

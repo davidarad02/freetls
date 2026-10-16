@@ -172,6 +172,104 @@ class QUICSession:
             return b""
         return self._engine.server_hello()
 
+    # -- requests ------------------------------------------------------------
+    def _require_engine(self) -> EngineSession:
+        if self._engine is None:
+            raise FreeTLSError("session is not handshaked")
+        return self._engine
+
+    def request(
+        self,
+        path: str = "/",
+        method: str = "GET",
+        headers=None,
+        body: bytes = b"",
+        scheme: str = "https",
+        authority: str | None = None,
+    ) -> dict:
+        """Issue an HTTP/3 request over this connection.
+
+        The body is buffered (mirrors :meth:`~freetls.TLSSession.h2_request`).
+        The Go ``http3.Transport`` multiplexes on the wire, so concurrent calls
+        from multiple threads share the one QUIC connection.
+        """
+        import base64
+
+        engine = self._require_engine()
+        auth = authority or self._sni
+        if not auth and self._remote is not None:
+            auth = f"{self._remote[0]}:{self._remote[1]}"
+        req = {
+            "method": method,
+            "scheme": scheme,
+            "authority": auth or "",
+            "path": path,
+            "headers": [list(h) for h in (headers or [])],
+            "body_b64": base64.b64encode(body).decode() if body else "",
+            "timeout_ms": self.spec.timeout_ms,
+        }
+        resp = engine.h3_request(req)
+        if resp.get("body_b64"):
+            resp["body"] = base64.b64decode(resp["body_b64"])
+        else:
+            resp["body"] = b""
+        from .fingerprint import ja4h_from_request
+
+        resp.update(ja4h_from_request(method, headers or [], version="HTTP/3"))
+        return resp
+
+    # -- RFC 9297 datagrams --------------------------------------------------
+    def open_datagram_flow(
+        self,
+        path: str = "/",
+        method: str = "GET",
+        headers=None,
+        scheme: str = "https",
+        authority: str | None = None,
+    ) -> int:
+        """Open an HTTP/3 datagram flow and return its flow ID.
+
+        Datagrams are associated with a request stream (RFC 9297), so a flow is
+        opened by sending a request first. ``FingerprintSpec.quic_datagrams``
+        must be set or the engine refuses.
+        """
+        engine = self._require_engine()
+        if not self.spec.quic_datagrams:
+            raise FreeTLSError("datagrams are not enabled for this session")
+        auth = authority or self._sni
+        if not auth and self._remote is not None:
+            auth = f"{self._remote[0]}:{self._remote[1]}"
+        req = {
+            "method": method,
+            "scheme": scheme,
+            "authority": auth or "",
+            "path": path,
+            "headers": [list(h) for h in (headers or [])],
+            "timeout_ms": self.spec.timeout_ms,
+        }
+        resp = engine.h3_datagram_open(req)
+        if resp.get("error"):
+            raise FreeTLSError(f"open datagram flow failed: {resp['error']}")
+        return int(resp["flow"])
+
+    def send_datagram(self, flow: int, data: bytes) -> None:
+        """Send one HTTP/3 datagram on ``flow``."""
+        engine = self._require_engine()
+        resp = engine.h3_datagram_send(flow, data)
+        if resp.get("error"):
+            raise FreeTLSError(f"send datagram failed: {resp['error']}")
+
+    def recv_datagram(self, flow: int, timeout: float | None = None) -> bytes:
+        """Receive one HTTP/3 datagram on ``flow``."""
+        import base64
+
+        engine = self._require_engine()
+        ms = 0 if timeout is None else max(1, int(timeout * 1000))
+        resp = engine.h3_datagram_recv(flow, ms)
+        if resp.get("error"):
+            raise FreeTLSError(f"recv datagram failed: {resp['error']}")
+        return base64.b64decode(resp["data_b64"]) if resp.get("data_b64") else b""
+
     # -- ssl.SSLSocket-like accessors ---------------------------------------
     @property
     def state(self) -> EngineState:

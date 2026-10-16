@@ -458,6 +458,9 @@ class FingerprintSpec:
     quic_id: str | None = None
     # Reserved for the deferred 0-RTT work; not yet honoured by the engine.
     quic_early_data: bool = False
+    # Enable RFC 9297 HTTP/3 datagrams (RFC 9221 QUIC datagrams). Off by default:
+    # a datagram-enabled client requires the peer to support QUIC datagrams.
+    quic_datagrams: bool = False
 
     def __post_init__(self) -> None:
         if self.verify is None:
@@ -519,6 +522,8 @@ class FingerprintSpec:
             out["quic_id"] = self.quic_id
         if self.quic_early_data:
             out["quic_early_data"] = True
+        if self.quic_datagrams:
+            out["quic_datagrams"] = True
         return out
 
     def find(self, kind: str) -> Extension | None:
@@ -580,4 +585,5 @@ class FingerprintSpec:
             ),
             quic_id=self.quic_id,
             quic_early_data=self.quic_early_data,
+            quic_datagrams=self.quic_datagrams,
         )

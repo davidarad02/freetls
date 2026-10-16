@@ -6,10 +6,12 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/quic-go/quic-go/http3"
 )
@@ -30,6 +32,26 @@ func main() {
 		}
 		fmt.Fprint(w, "ok")
 	})
+	// RFC 9297: echo every HTTP/3 datagram received on the request's flow.
+	mux.HandleFunc("/echo-datagram", func(w http.ResponseWriter, r *http.Request) {
+		streamer, ok := w.(http3.HTTPStreamer)
+		if !ok {
+			http.Error(w, "streaming not available", http.StatusInternalServerError)
+			return
+		}
+		str := streamer.HTTPStream()
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		for {
+			b, err := str.ReceiveDatagram(ctx)
+			if err != nil {
+				return
+			}
+			if err := str.SendDatagram(b); err != nil {
+				return
+			}
+		}
+	})
 
 	srv := &http3.Server{
 		Addr: addr,
@@ -37,7 +59,8 @@ func main() {
 			NextProtos: []string{"h3"},
 			MinVersion: tls.VersionTLS13,
 		},
-		Handler: mux,
+		EnableDatagrams: true,
+		Handler:         mux,
 	}
 	if err := srv.ListenAndServeTLS(cert, key); err != nil {
 		panic(err)

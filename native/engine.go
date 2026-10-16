@@ -104,6 +104,10 @@ type specJSON struct {
 	Quic          *quicInitialJSON `json:"quic,omitempty"`
 	QuicID        string           `json:"quic_id,omitempty"`
 	QuicEarlyData bool             `json:"quic_early_data,omitempty"`
+	// QuicDatagrams enables RFC 9297 HTTP/3 datagrams (RFC 9221 QUIC datagrams)
+	// for the connection. It must match on the QUIC layer and the http3 layer,
+	// so the engine sets both from this one flag.
+	QuicDatagrams bool `json:"quic_datagrams,omitempty"`
 
 	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
@@ -206,6 +210,7 @@ type session struct {
 	quicCH    []byte
 	quicSH    []byte
 	quicEarly bool
+	quicDgram bool
 }
 
 var (
@@ -928,7 +933,7 @@ func freetls_session_new(specJSON *C.char) (id C.longlong) {
 	sess := &session{spec: chs, config: cfg, preset: s.Preset, chloJSON: s.ChloJSON,
 		noSNI: s.PresetNoSNI, alpn: s.PresetALPN,
 		alpnSet: s.PresetALPN != nil, alpnDel: s.PresetALPNRemove,
-		quicID: s.QuicID, qinit: s.Quic, quicEarly: s.QuicEarlyData}
+		quicID: s.QuicID, qinit: s.Quic, quicEarly: s.QuicEarlyData, quicDgram: s.QuicDatagrams}
 	if s.TimeoutMS > 0 {
 		sess.timeout = time.Duration(s.TimeoutMS) * time.Millisecond
 	}

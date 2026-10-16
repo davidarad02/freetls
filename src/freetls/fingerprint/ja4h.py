@@ -22,6 +22,8 @@ def _version_code(version) -> str:
     if version is None:
         return "11"
     text = str(version)
+    if text in ("3", "30", "HTTP/3", "h3", "HTTP/3.0", "http3"):
+        return "30"
     if text in ("2", "20", "HTTP/2", "h2", "HTTP/2.0", "http2"):
         return "20"
     if "/" in text:

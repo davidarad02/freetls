@@ -22,6 +22,7 @@ class JA4Adapter(HTTPAdapter):
         self,
         spec: FingerprintSpec | None = None,
         spec_factory: Callable[[], FingerprintSpec] | None = None,
+        http3: bool = False,
         **kwargs,
     ) -> None:
         if spec is None and spec_factory is None:
@@ -30,6 +31,7 @@ class JA4Adapter(HTTPAdapter):
             raise ValueError("provide only one of spec= or spec_factory=")
         self._spec = spec
         self._spec_factory = spec_factory
+        self._http3 = http3
         self._last_session = None
         super().__init__(**kwargs)
 
@@ -42,7 +44,9 @@ class JA4Adapter(HTTPAdapter):
         self._last_session = session
 
     def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
-        manager_cls = make_pool_manager(self._factory, on_session=self._record_session)
+        manager_cls = make_pool_manager(
+            self._factory, on_session=self._record_session, http3=self._http3
+        )
         self.poolmanager = manager_cls(
             num_pools=connections,
             maxsize=maxsize,
@@ -51,23 +55,27 @@ class JA4Adapter(HTTPAdapter):
 
     @property
     def last_session(self):
-        """The most recent :class:`~freetls.TLSSession` (or None)."""
+        """The most recent session (:class:`TLSSession` or :class:`QUICSession`)."""
         return self._last_session
 
     @property
     def last_ja4(self):
         s = self._last_session
-        return s.ja4 if s is not None else None
+        if s is None:
+            return None
+        return getattr(s, "ja4", None) or getattr(s, "ja4q", None)
 
     @property
     def last_ja3(self):
         s = self._last_session
-        return s.ja3 if s is not None else None
+        return getattr(s, "ja3", None) if s is not None else None
 
     @property
     def last_ja4s(self):
         s = self._last_session
-        return s.ja4s if s is not None else None
+        if s is None:
+            return None
+        return getattr(s, "ja4s", None) or getattr(s, "ja4sq", None)
 
     def cert_verify(self, conn, url, verify, cert) -> None:
         # Certificate verification is delegated to the native engine.

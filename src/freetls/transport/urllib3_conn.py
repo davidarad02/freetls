@@ -16,8 +16,9 @@ from urllib3.exceptions import ProtocolError
 from urllib3.response import HTTPResponse as U3Response
 
 from ..model import FingerprintSpec
+from ..quic import QUICSession
 from ..session import TLSSession
-from . import _http2
+from . import _http2, _http3
 from ._content import decode_content as _decode_content
 
 
@@ -30,15 +31,34 @@ class Ja4HTTPSConnection(HTTPSConnection):
     """
 
     _spec_factory: Callable[[], FingerprintSpec] = NotImplemented
-    _on_session: Callable[[TLSSession], None] | None = None
-    ja4_session: TLSSession | None = None
+    _on_session: Callable[[TLSSession | QUICSession], None] | None = None
+    _http3: bool = False
+    ja4_session: TLSSession | QUICSession | None = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._h2_req = None
+        self._h3_req = None
 
     # -- TLS ----------------------------------------------------------------
     def connect(self) -> None:  # noqa: D401
+        if self._http3:
+            if self.proxy_is_tunneling or self._tunnel_host:
+                raise ProtocolError("HTTP/3 over a proxy is not supported")
+            spec = self._spec_factory()
+            session: TLSSession | QUICSession = QUICSession(spec)
+            session.connect(
+                self.host,
+                self.port or 443,
+                server_hostname=self.server_hostname or self.host,
+            )
+            self.ja4_session = session
+            if self._on_session is not None:
+                self._on_session(session)
+            self.sock = session
+            self.is_verified = bool(spec.verify)
+            return
+
         HTTPConnection.connect(self)
         assert self.sock is not None
         if self.proxy_is_tunneling and self._tunnel_host:
@@ -62,17 +82,48 @@ class Ja4HTTPSConnection(HTTPSConnection):
     def request(self, method, url, body=None, headers=None, **kwargs):  # type: ignore[override]
         if self.sock is None:
             self.connect()
+        if self._http3:
+            self._h3_req = (method, url, body, headers)
+            return
         if self._h2_enabled():
             self._h2_req = (method, url, body, headers)
             return
         return super().request(method, url, body=body, headers=headers, **kwargs)
 
     def getresponse(self):  # type: ignore[override]
+        if self._h3_req is not None:
+            method, url, body, headers = self._h3_req
+            self._h3_req = None
+            return self._h3_getresponse(method, url, body, headers)
         if self._h2_req is not None:
             method, url, body, headers = self._h2_req
             self._h2_req = None
             return self._h2_getresponse(method, url, body, headers)
         return super().getresponse()
+
+    def _h3_getresponse(self, method, url, body, headers) -> U3Response:
+        body_bytes: bytes = b"" if body is None else bytes(body)
+        try:
+            resp = _http3.execute(self.ja4_session, method, url, headers, body_bytes)
+        except Exception as exc:  # noqa: BLE001
+            raise ProtocolError(str(exc)) from exc
+        hdrs = HTTPHeaderDict()
+        for k, v in _http3.header_tuples(resp):
+            hdrs.add(k, v)
+        data, decoded_headers = _decode_content(resp.get("body", b""), list(hdrs.items()))
+        out_headers = HTTPHeaderDict()
+        for k, v in decoded_headers:
+            out_headers.add(k, v)
+        return U3Response(
+            body=io.BytesIO(data),
+            headers=out_headers,
+            status=_http3.status_of(resp),
+            version=30,
+            version_string="HTTP/3",
+            reason="",
+            preload_content=False,
+            request_method=method,
+        )
 
     def _h2_getresponse(self, method, url, body, headers) -> U3Response:
         body_bytes: bytes = b"" if body is None else bytes(body)
@@ -105,13 +156,15 @@ class Ja4HTTPSConnectionPool(HTTPSConnectionPool):
 
 def make_pool_manager(
     spec_factory: Callable[[], FingerprintSpec],
-    on_session: Callable[[TLSSession], None] | None = None,
+    on_session: Callable[[TLSSession | QUICSession], None] | None = None,
+    http3: bool = False,
 ) -> type[PoolManager]:
     """Return a PoolManager subclass whose HTTPS pools use the freetls engine."""
 
     class _Conn(Ja4HTTPSConnection):
         _spec_factory = staticmethod(spec_factory)
         _on_session = staticmethod(on_session) if on_session else None
+        _http3 = http3
 
     class _Pool(Ja4HTTPSConnectionPool):
         ConnectionCls = _Conn

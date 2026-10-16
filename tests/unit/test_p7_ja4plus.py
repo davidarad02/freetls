@@ -75,3 +75,9 @@ def test_ja4h_no_cookies_or_referer():
     result = ja4h("POST", [("Host", "x"), ("Accept", "*/*")], version="HTTP/2")
     assert result["ja4h"].startswith("po20nn02")
     assert result["ja4h"].endswith("_" + "0" * 12 + "_" + "0" * 12)
+
+
+def test_ja4h_http3_version_code():
+    for version in ("HTTP/3", "HTTP/3.0", "h3", "3", "30"):
+        result = ja4h("GET", [("Host", "x"), ("Accept", "*/*")], version=version)
+        assert result["ja4h"].startswith("ge30nn02"), version
