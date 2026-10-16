@@ -265,6 +265,7 @@ def test_tls12_libcrypto_suite_completes(
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite
     assert result["ja4"].startswith("t12")
@@ -283,6 +284,7 @@ def test_camellia_cbc_implicit_iv(libcrypto_engine, rsa_certs, version, vmin, vm
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["cipher_suite"] == 0x0041
     assert result["version"] in ("TLS1.0", "TLS1.1")
 
@@ -312,6 +314,7 @@ def test_tls13_ccm_offered(libcrypto_engine, rsa_certs):
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.3"
     assert result["cipher_suite"] == 0x1301
     ch = bytes.fromhex(result["client_hello"])

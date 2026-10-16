@@ -259,6 +259,7 @@ def test_psk_suite_completes(wide_engine, suite, name):
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite
 
@@ -273,6 +274,7 @@ def test_ecdhe_psk_suite_completes(wide_engine, suite, name):
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite
 
@@ -285,6 +287,7 @@ def test_dhe_psk_suite_completes(wide_engine, suite, name):
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite
 
@@ -297,5 +300,6 @@ def test_rsa_psk_suite_completes(wide_engine, rsa_certs, suite, name):
     finally:
         srv.stop()
     assert result["ok"], result
+    assert result["data_ok"], result
     assert result["version"] == "TLS1.2"
     assert result["cipher_suite"] == suite

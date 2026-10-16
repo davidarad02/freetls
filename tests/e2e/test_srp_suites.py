@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import struct
 
+import pytest
+
 import freetls
 
 TLS12 = 0x0303
@@ -72,3 +74,20 @@ def test_srp_username_extension_absent_without_credentials():
     spec = modes.specific(ciphers=[0xC01D], vers_min=TLS12, vers_max=TLS12)
     exts = _client_hello_extensions(freetls.engine.spec_raw(spec.to_engine()))
     assert 12 not in exts
+
+
+def test_srp_negotiation_not_available_locally():
+    """SRP has no local end-to-end server, so it is not negotiated here.
+
+    OpenSSL 3.5.5 still ships the SRP ciphers and the ``srp`` username
+    extension, but its deprecated ``s_server -srpvfile`` username lookup never
+    resolves the user (its own ``s_client -srpuser`` also fails to complete), so
+    a full SRP handshake cannot be driven locally. SRP correctness is covered by
+    the fork's Go client/reference-server round-trip test
+    (``srp_freetls_test.go``) and the offer-level checks above. This test exists
+    so the limitation is explicit in the report rather than silently passing.
+    """
+    pytest.skip(
+        "OpenSSL 3.5.5's deprecated s_server SRP app path does not complete; "
+        "SRP is verified at the key-agreement level"
+    )

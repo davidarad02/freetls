@@ -1184,6 +1184,9 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
   OpenSSL 3.5.5 does not implement are out of scope. TLS 1.3 CCM is implemented
   but no local OpenSSL/Go server negotiates it (covered at the AEAD level); SRP
   is verified at the key-agreement and offer level because OpenSSL 3.5.5's
-  deprecated ``s_server -srpvfile`` path does not complete.
+  deprecated ``s_server -srpvfile`` path does not complete. Of the 144 wide
+  suites, ``tests/e2e/test_all_suites.py`` negotiates **129** end-to-end (with an
+  application-data round trip) and skips the other 15 with a concrete reason
+  (RC4/3DES/TLS 1.3 CCM/legacy-ChaCha not in OpenSSL 3.5.5, plus SRP).
 - Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
   system on those platforms; this checkout is exercised on Linux/CPython 3.14.

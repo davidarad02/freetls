@@ -265,6 +265,13 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   test) because OpenSSL 3.5.5's deprecated `s_server -srpvfile` path does not
   complete. Go unit tests live in the fork (`ffdhe_freetls_test.go`,
   `psk_freetls_test.go`, `srp_freetls_test.go`).
+- `tests/e2e/test_all_suites.py` is the coverage matrix: it negotiates every
+  registered suite end-to-end (handshake **plus** an HTTP application-data round
+  trip) against a per-suite `openssl s_server` built from `openssl ciphers -V`.
+  Of the 144 wide suites, **129 negotiate** and **15 are `skip`ped with a
+  concrete reason** (9 not in the OpenSSL 3.5.5 default provider — RC4, 3DES,
+  TLS 1.3 CCM, the old ChaCha drafts — and 6 SRP). Adding a suite means it must
+  either negotiate here or be added to the documented skip set.
 - Keep the 85% coverage gate green (`make coverage`); if you add code, add tests.
 
 ## Conventions

@@ -38,8 +38,17 @@ def main() -> int:
         with TLSSession(spec) as s:
             s.connect(host, int(port), server_hostname=name or None)
             cipher = s.cipher()
+            s.sendall(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+            data = b""
+            while b"\r\n\r\n" not in data and len(data) < 8192:
+                chunk = s.recv(2048)
+                if not chunk:
+                    break
+                data += chunk
             out = {
                 "ok": True,
+                "data_ok": b"HTTP/1.0 200" in data or b"HTTP/1.1 200" in data,
+                "app_bytes": len(data),
                 "ja4": s.ja4,
                 "version": s.state.version,
                 "cipher_suite": s.state.cipher_suite,
