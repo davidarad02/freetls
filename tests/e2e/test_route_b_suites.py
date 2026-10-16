@@ -322,28 +322,38 @@ def test_preset_ja4_parity(libcrypto_engine):
     """Presets must have identical JA4 with and without the libcrypto backend."""
     from freetls import engine, ja4_from_bytes
 
-    stable: dict[str, str] = {}
-    for name in engine.preset_list():
-        try:
-            first = ja4_from_bytes(engine.preset_raw(name))["ja4"]
-            second = ja4_from_bytes(engine.preset_raw(name))["ja4"]
-        except Exception:  # noqa: BLE001
-            continue
-        if first and first == second:
-            stable[name] = first
-    assert stable, "no deterministic presets found to compare"
+    samples = 6
+    names = engine.preset_list()
+    default_sets: dict[str, set[str]] = {}
+    for name in names:
+        seen: set[str] = set()
+        for _ in range(samples):
+            try:
+                seen.add(ja4_from_bytes(engine.preset_raw(name))["ja4"])
+            except Exception:  # noqa: BLE001
+                break
+        default_sets[name] = seen
 
     env = dict(os.environ)
     env["FREETLS_LIB"] = libcrypto_engine
     env["PYTHONPATH"] = str(SRC) + os.pathsep + env.get("PYTHONPATH", "")
+    env["FREETLS_PRESET_SAMPLES"] = str(samples)
     proc = subprocess.run(
-        [sys.executable, str(PRESETS), *stable],
+        [sys.executable, str(PRESETS), *names],
         capture_output=True,
         text=True,
         env=env,
-        timeout=60,
+        timeout=120,
     )
     assert proc.returncode == 0, proc.stderr
-    tagged = json.loads(proc.stdout.strip().splitlines()[-1])
-    mismatches = {n: (stable[n], tagged.get(n)) for n in stable if tagged.get(n) != stable[n]}
-    assert not mismatches, mismatches
+    tagged_sets = {n: set(v) for n, v in json.loads(proc.stdout.strip().splitlines()[-1]).items()}
+
+    # Compare only presets that are deterministic in *both* engines (a
+    # nondeterministic preset's sampled set would differ by chance).
+    compared = 0
+    for name in names:
+        d, w = default_sets.get(name, set()), tagged_sets.get(name, set())
+        if len(d) == 1 and len(w) == 1:
+            compared += 1
+            assert d == w, f"{name}: default {d} != wide {w}"
+    assert compared > 0, "no deterministic presets found to compare"

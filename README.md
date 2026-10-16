@@ -499,8 +499,11 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   custom/simple configs. Of the 220-profile catalog, 75 pass with the default
   engine.
 - For randomized workloads, use `modes.safe_random(...)` (or `safe=True` on
-  `partial_random`/`true_random`), which draws only from backed ciphers and the
-  whitelist.
+  `partial_random`/`true_random`). The safe defaults are **adaptive**: ciphers
+  are drawn from about half the engine's backed pool (which maximises the number
+  of distinct JA4 values) and extensions from a random subset of the whitelist's
+  free extensions. On the wide engine this yields ~10⁹–10¹³ distinct safe JA4s;
+  on the Go-only engine it is necessarily smaller (~10³–10⁶).
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
 The default is **unsafe**, for backward compatibility.

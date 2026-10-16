@@ -218,6 +218,15 @@ fail safe mode. Safe mode therefore requires a **new "safe randomization"**:
 draw ciphers from `supported_ciphers` and extensions from the whitelist. This is
 new functionality, added as part of this work.
 
+The safe defaults are **adaptive**: the cipher count defaults to about half the
+backed pool (which maximises `C(n, k)`, and hence the number of distinct
+`JA4_b` values — drawing the whole pool would be deterministic), and the
+extension count defaults to a random subset of the whitelist's free extensions.
+The unsafe extension default was also corrected from 8 / 40 to `⌊47/2⌋ = 23`
+(the `C(47, k)` maximum). Measured distinct JA4s over 800 seeds: safe
+`partial_random`/`safe_random` 785 (was 66/1) and `true_random` 800 (was 1) on
+the Go-only engine; 800 on the wide engine.
+
 ### 6.5 What safe mode loses (measured)
 Against the current catalog: **75 / 220 profiles pass; 145 fail** (50 unsupported
 ciphers; 15 ECH; 10 trust_anchors; the rest preset-specific ids such as
@@ -225,9 +234,12 @@ ciphers; 15 ECH; 10 trust_anchors; the rest preset-specific ids such as
 
 | mode | cipher-hash (b) | ext factor | total S | n₅₀ | P(collision @10k) |
 |---|---|---|---|---|---|
-| unsafe (generic padding) | ≤2^48 | C(47,8)=3.1e8 | ~1e15–8.9e22 | 3.8e7–3.5e11 | ≤5e-8 |
-| safe, Go-only | C(25,k) ≤ 5.2e6 | ~2^9 | ~2.7e9 | ~5.5e4 | ~1.8% |
-| safe, Route B | C(47,k) ≤ 1.6e13 | ~2^9 | ~8e15 | ~1e8 | ~6e-15 |
+| unsafe `partial_random` / `true_random` | ≤2^48 | C(47,23)=1.6e13 | ~4.5e27 | ~7.9e13 | ~0 |
+| safe, Go-only (27 backed) | C(12,6)=924 … C(22,11)=7.1e5 | 2^5 | ~3e4 … 2.3e7 | 202 … 5.6e3 | high |
+| safe, wide (51 backed) | C(36,18)=9.1e9 … C(46,23)=8.2e12 | 2^5 | ~2.9e11 … 2.6e14 | 6.3e5 … 1.9e7 | ≤1.7e-4 |
+
+(`specific` mode over the backed pool reaches `C(51,k)` up to 2.5e14 on the wide
+engine, i.e. near the 2^48 cipher-hash cap.)
 
 **Not lost in safe mode:** GREASE control, padding, ALPS, cert compression,
 record_size_limit, OCSP/SCT, resumption/PSK, PQ groups, extension order control,

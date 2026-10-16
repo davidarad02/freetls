@@ -104,3 +104,36 @@ def test_true_random_keeps_functional_core():
 def test_safe_padding_excludes_known_unsafe():
     for unsafe in (0x0001, 0x000E, 0x001B, 0x0029, 0x002F, 0x0032):
         assert unsafe not in modes.SAFE_PADDING_EXT_IDS
+
+
+def test_unsafe_random_extension_default_is_half_the_pool():
+    # Half the padding pool maximises C(47, k); the old 8/40 defaults did not.
+    expected = len(modes.SAFE_PADDING_EXT_IDS) // 2
+    for spec in (modes.partial_random(seed=1), modes.true_random(seed=1)):
+        generic = [e for e in spec.extensions if e.kind == "generic"]
+        assert len(generic) == expected
+
+
+def test_safe_random_modes_are_diverse():
+    # Regression: the safe random modes used to be deterministic (or nearly so)
+    # on the Go-only engine.
+    from freetls.fingerprint import ja4_from_spec
+
+    factories = (
+        lambda s: modes.partial_random(server_name="x", seed=s, safe=True),
+        lambda s: modes.true_random(server_name="x", seed=s, safe=True),
+        lambda s: modes.safe_random(server_name="x", seed=s),
+    )
+    for fn in factories:
+        ja4s = {ja4_from_spec(fn(s))["ja4"] for s in range(60)}
+        assert len(ja4s) > 20
+
+
+def test_safe_random_stays_within_backed_pool():
+    from freetls import engine, safety
+
+    backed = set(engine.supported_ciphers())
+    for s in range(20):
+        spec = modes.safe_random(server_name="x", seed=s)
+        safety.validate(spec)
+        assert set(spec.ciphers) <= backed
