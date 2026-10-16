@@ -33,9 +33,9 @@ completable suites**.
   and suite registration (M2).
 - `block_evp.go`: EVP `cipher.Block` wrapper (ECB) reused by Go's CBC/MAC/record
   logic, plus the 8 Camellia-CBC suites (M3).
-- `make libcrypto` builds the wide engine; `make test-libcrypto` runs the fork's
-  EVP tests; `tests/e2e/test_route_b_suites.py` verifies each TLS 1.2/1.0/1.1
-  suite against `openssl s_server` plus preset JA4 parity (27 tests).
+- `make native` builds the wide engine; `make test-libcrypto` runs the fork's EVP
+  tests; `tests/e2e/test_route_b_suites.py` verifies each TLS 1.2/1.0/1.1 suite
+  against `openssl s_server` plus preset JA4 parity (27 tests).
 - Safe/unsafe mode (M4): engine exports `freetls_supported_ciphers` /
   `freetls_supported_extensions` / `freetls_spec_raw`; C-ABI bumped to **2**;
   `freetls.set_safe_mode` / `get_safe_mode` and `FingerprintSpec.safe`;
@@ -47,12 +47,22 @@ completable suites**.
 - The wide engine completes **51** cipher suites (25 Go + 2 legacy ChaCha20 +
   24 Route B), up from 27.
 - Packaging (M5): the OpenSSL 3.5.5 source is a git submodule at
-  `native/third_party/openssl`; `make full` builds it as a static PIC
+  `native/third_party/openssl` (shallow); `make native` builds it as a static PIC
   `libcrypto.a` and links it into `libfreetls.so` with
   `-Wl,-Bsymbolic -Wl,--exclude-libs,ALL` (no `libcrypto` DT_NEEDED, no exported
-  OpenSSL symbols). `FREETLS_FULL=1 pip wheel .` bundles that engine. The
-  interposition test (`tests/e2e/test_full_engine.py`) runs Python `ssl` and the
-  static engine concurrently without a crash. A plain clone still builds Go-only.
+  OpenSSL symbols). The interposition test (`tests/e2e/test_full_engine.py`) runs
+  Python `ssl` and the static engine concurrently without a crash.
+
+- **Post-Route-B change (supersedes D11):** the **wide** engine is now the
+  **default** build/install everywhere; the Go-only engine is an alternate
+  selected at runtime. `make native` = wide static, `make native-go` = Go-only,
+  `make native-dynamic` = wide dynamic (dev); `FREETLS_NO_OPENSSL=1` builds
+  Go-only; the runtime auto-build is **removed** (builds happen only at install).
+  Wheels bundle both engines. Runtime switching is string-free:
+  `freetls.use_engine(Engine.WIDE | Engine.GO)`, `use_engine_file(path)`,
+  `current_engine()`, and the `engine_context(...)` context manager. OpenSSL
+  updates use `make update-openssl TAG=openssl-x.y.z` with a stamp
+  (`.freetls-built`) that auto-rebuilds on submodule/config change.
 
 ---
 
@@ -78,7 +88,8 @@ that verifies a spec is fully backed before use.
   JA4/JA3/JA4S (no regression); the default offered cipher list is unchanged.
 - New `freetls` **safe mode** rejects any spec whose effective ClientHello
   contains a cipher/extension the engine cannot directly support.
-- Clone → works with Go alone; the wide pool is one command (`make full`).
+- The wide engine is the default build/install; the Go-only engine is opt-in via
+  `FREETLS_NO_OPENSSL=1` / `make native-go` and selectable at runtime.
 - Coverage gate stays ≥85%; all tests local.
 
 ---
@@ -97,7 +108,7 @@ that verifies a spec is fully backed before use.
 | D8 | **TLS 1.0/1.1 enabled** (build/`SECLEVEL=0`). |
 | D9 | C-ABI version bumped **1 → 2** (old engines rejected). |
 | D10 | Default mode = **unsafe** (current behavior); safe is opt-in. Big README warning. |
-| D11 | Portability: default clone/build uses **Go only**; `make full` enables the wide pool. |
+| D11 | ~~Portability: default clone/build uses **Go only**; `make full` enables the wide pool.~~ **Superseded** — the wide engine is now the default; see the post-Route-B note in §0. |
 
 ---
 
@@ -249,20 +260,23 @@ all transports/cert-suite/H2/timeouts, and the 75 backed profiles.
 
 ## 7. Build, packaging, portability
 
-- **Default (Go-only):** `make venv` / `pip install` builds the engine as today
-  (25 suites). Clone → works with just Go. The loader's auto-build stays Go-only
-  and never triggers an OpenSSL build.
-- **Full:** `make full` → build the pinned OpenSSL submodule as a **static PIC
-  `libcrypto.a`** → rebuild `libfreetls.so` with `-tags freetls_libcrypto`.
-  Requires Go + perl + make. Cached.
-- **Wheels:** ship the full (wide) engine, statically linked, so `pip install`
-  users need no build.
+- **Default (wide):** `make native` / `make venv` / `pip install` build the
+  **wide** engine: the pinned OpenSSL submodule as a **static PIC `libcrypto.a`**,
+  linked with `-tags "freetls_libcrypto freetls_static_openssl"`. Requires Go +
+  perl + make (+ network the first time). Cached via the `.freetls-built` stamp.
+- **Go-only alternate:** `make native-go` (or `FREETLS_NO_OPENSSL=1`) builds the
+  dependency-free engine; `make native-dynamic` builds a dynamic-libcrypto dev
+  engine.
+- **No runtime auto-build:** the engine is compiled at install and only loaded at
+  runtime (`use_engine(Engine.GO)` switches variants without a restart).
+- **Wheels:** bundle **both** engines, statically linked, so `pip install` users
+  need no build.
 - **Symbol hygiene (CRITICAL):** Python's `_ssl` already links the system
   `libcrypto.so.3`. The embedded libcrypto must not interpose:
-  `-fvisibility=hidden`, `-Wl,--exclude-libs,ALL`, `-Wl,-Bsymbolic`, and a
-  version script exporting only `freetls_*`.
-- OpenSSL source comes from the submodule (network at clone time); the submodule
-  is only needed for `make full`, not for the default build.
+  `-Wl,--exclude-libs,ALL` and `-Wl,-Bsymbolic` (the static link hides the
+  symbols).
+- OpenSSL source comes from the shallow submodule (network at clone time); bump it
+  with `make update-openssl TAG=...`, which rebuilds transparently.
 
 ---
 
@@ -296,7 +310,7 @@ all transports/cert-suite/H2/timeouts, and the 75 backed profiles.
 3. **P2 CBC** — EVP `cipher.Block` wrappers.
 4. **Safe/unsafe mode** — engine exports, ABI bump to 2, whitelist validation,
    safe randomization, tests.
-5. **Packaging & docs** — `make full`, static symbol-hidden build, wheel,
+5. **Packaging & docs** — `make native` (wide static, symbol-hidden), wheel,
    README warning + AGENTS updates, coverage gate.
 
 ---

@@ -1,9 +1,9 @@
-"""Route B "full" engine: static libcrypto link and symbol interposition.
+"""Static wide engine: libcrypto link and symbol interposition.
 
-``make full`` links a static, PIC libcrypto built from the OpenSSL submodule and
+``make native`` links a static, PIC libcrypto built from the OpenSSL submodule and
 hides its symbols, so the engine can be loaded next to Python's ``_ssl`` (which
 links the system ``libcrypto.so.3``) without interposing. These tests build the
-full engine once and exercise it in a subprocess.
+static wide engine once and exercise it in a subprocess.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def full_engine(tmp_path_factory) -> str:
     if go is None:
         pytest.skip("Go toolchain not available")
     if not (OPENSSL_DIR / "libcrypto.a").exists():
-        pytest.skip("static OpenSSL not built (run `make full` first)")
+        pytest.skip("static OpenSSL not built (run `make native` first)")
     out = tmp_path_factory.mktemp("full") / "libfreetls.so"
     env = dict(os.environ)
     env.setdefault("GOPATH", os.path.expanduser("~/go"))

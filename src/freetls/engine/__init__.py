@@ -6,21 +6,29 @@ handle wrapper.
 """
 
 from ._cffi import (
+    Engine,
+    EngineInfo,
     EngineSession,
     EngineState,
     abi_version,
     active_sessions,
     chlo_raw,
+    current_engine,
+    engine_context,
     preset_list,
     preset_raw,
     preset_raw_opts,
     spec_raw,
     supported_ciphers,
     supported_extensions,
+    use_engine,
+    use_engine_file,
     version,
 )
 
 __all__ = [
+    "Engine",
+    "EngineInfo",
     "EngineSession",
     "EngineState",
     "version",
@@ -33,4 +41,8 @@ __all__ = [
     "supported_ciphers",
     "supported_extensions",
     "active_sessions",
+    "use_engine",
+    "use_engine_file",
+    "current_engine",
+    "engine_context",
 ]

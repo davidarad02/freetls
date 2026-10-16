@@ -5,13 +5,13 @@ Loads the Go c-shared library and exposes a small, safe Python wrapper.
 
 from __future__ import annotations
 
+import enum
 import json
 import os
 import platform
-import shutil
-import subprocess
-import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..errors import EngineError, HandshakeError, SpecError
 
@@ -54,14 +54,58 @@ def _lib_filename() -> str:
     return _LIB_NAMES.get(platform.system().lower(), "libfreetls.so")
 
 
-def _candidate_paths() -> list[str]:
+def _go_lib_filename() -> str:
+    stem, dot, ext = _lib_filename().rpartition(".")
+    return f"{stem}_go{dot}{ext}" if dot else f"{_lib_filename()}_go"
+
+
+class Engine(enum.Enum):
+    """A built-in engine variant.
+
+    ``WIDE`` is the default (Go + a static OpenSSL ``libcrypto`` backend, 51
+    completable cipher suites); ``GO`` is the Go-only engine (27 suites).
+    """
+
+    WIDE = "wide"
+    GO = "go"
+
+
+@dataclass(frozen=True)
+class EngineInfo:
+    """Identifies the engine currently in use."""
+
+    kind: Engine | None  # None when loaded from an explicit file
+    path: str
+
+
+class _Engine:
+    """A loaded engine shared object plus its cffi binding."""
+
+    def __init__(self, path: str, ffi, lib, kind: Engine | None):
+        self.path = path
+        self.ffi = ffi
+        self.lib = lib
+        self.kind = kind
+        self.abi = int(lib.freetls_abi_version())
+
+    def info(self) -> EngineInfo:
+        return EngineInfo(kind=self.kind, path=self.path)
+
+
+# One entry per resolved path; ``_current`` is the engine new sessions use.
+_engines: dict[str, _Engine] = {}
+_current: _Engine | None = None
+
+
+def _candidate_paths(name: str | None = None) -> list[str]:
     env = os.environ.get("FREETLS_LIB")
     here = os.path.dirname(os.path.abspath(__file__))  # src/freetls/engine
     pkg = os.path.dirname(here)  # src/freetls
     proj_root = os.path.dirname(os.path.dirname(pkg))  # project root
-    name = _lib_filename()
+    name = name or _lib_filename()
     cands = []
-    if env:
+    # $FREETLS_LIB is an explicit override for the *default* engine only.
+    if env and name == _lib_filename():
         cands.append(env)
     cands += [
         os.path.join(pkg, "_lib", name),
@@ -71,113 +115,140 @@ def _candidate_paths() -> list[str]:
     return cands
 
 
-_ffi = None
-_lib = None
-
-
-def _native_source_dir() -> str | None:
-    """The bundled ``native/`` Go source dir, if this is a source checkout."""
-    here = os.path.dirname(os.path.abspath(__file__))  # src/freetls/engine
-    proj_root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
-    native = os.path.join(proj_root, "native")
-    if os.path.exists(os.path.join(native, "go.mod")):
-        return native
-    return None
-
-
-def _find_go() -> str | None:
-    env = os.environ.get("FREETLS_GO")
-    if env:
-        return env if os.path.exists(env) else shutil.which(env)
-    found = shutil.which("go")
-    if found:
-        return found
-    for cand in (
-        os.path.expanduser("~/.local/go/bin/go"),
-        "/usr/local/go/bin/go",
-        "/opt/go/bin/go",
-        "/opt/homebrew/bin/go",
-    ):
-        if os.path.exists(cand):
-            return cand
-    return None
-
-
-def _autobuild() -> str | None:
-    """Build the engine from ``native/`` into ``native/`` if possible.
-
-    Lets a fresh source checkout work without a separate build step. Disable
-    with ``FREETLS_NO_AUTOBUILD=1``.
-    """
-    if os.environ.get("FREETLS_NO_AUTOBUILD"):
-        return None
-    native = _native_source_dir()
-    if native is None:
-        return None
-    go = _find_go()
-    if go is None:
-        return None
-    out = os.path.join(native, _lib_filename())
-    env = dict(os.environ)
-    env.setdefault("GOPATH", os.path.expanduser("~/go"))
-    env["CGO_ENABLED"] = "1"
-    env["PATH"] = os.path.dirname(go) + os.pathsep + env.get("PATH", "")
-    sys.stderr.write(f"freetls: building native engine (one-time) -> {out}\n")
-    subprocess.run(
-        [go, "build", "-buildmode=c-shared", "-o", out, "."],
-        cwd=native,
-        check=True,
-        env=env,
-    )
-    return out
-
-
-def _try_candidates(ffi):
+def _first_loadable(ffi, paths: list[str]) -> tuple[str | None, Any]:
+    """Return ``(path, lib)`` for the first path that loads, else ``(None, None)``."""
     last_err = None
-    for path in _candidate_paths():
+    for path in paths:
         if not path or not os.path.exists(path):
             continue
         try:
             lib = ffi.dlopen(path)
             lib.freetls_ping()  # smoke test
-            return lib
+            return path, lib
         except Exception as exc:  # noqa: BLE001
             last_err = exc
     if last_err is not None:
         raise last_err
-    return None
+    return None, None
 
 
-def _load():
-    global _ffi, _lib
-    if _lib is not None:
-        return _ffi, _lib
+def _make_ffi():
     import cffi  # imported lazily so the fingerprint core works without cffi
 
     ffi = cffi.FFI()
     ffi.cdef(_CDEF)
-    try:
-        lib = _try_candidates(ffi)
-    except Exception:
-        lib = None
-    if lib is None:
-        _autobuild()
-        lib = _try_candidates(ffi)
-    if lib is None:
+    return ffi
+
+
+def _check_abi(eng: _Engine) -> None:
+    if eng.abi != _EXPECTED_ABI:
         raise EngineError(
-            "could not load the native freetls engine. Build it with "
-            "`make native` (or `pip install -e .`), install a prebuilt wheel, "
-            "or set FREETLS_LIB=/path/to/libfreetls.so. Searched: "
-            + ", ".join(p for p in _candidate_paths() if p)
-        )
-    major = int(lib.freetls_abi_version())
-    if major != _EXPECTED_ABI:
-        raise EngineError(
-            f"native engine C-ABI version {major} is incompatible with this "
+            f"native engine C-ABI version {eng.abi} is incompatible with this "
             f"Python binding (expected {_EXPECTED_ABI}); rebuild with `make native`"
         )
-    _ffi, _lib = ffi, lib
-    return ffi, lib
+
+
+def _not_found(kind: Engine, paths: list[str], err: Exception | None = None) -> EngineError:
+    label = "wide (Go+libcrypto)" if kind is Engine.WIDE else "Go-only"
+    msg = (
+        f"could not load the {label} freetls engine. Build it with `make native` "
+        "(or `pip install .`), install a prebuilt wheel, or set "
+        "FREETLS_LIB=/path/to/libfreetls.so. Searched: " + ", ".join(p for p in paths if p)
+    )
+    if err is not None:
+        msg += f" (last error: {err})"
+    return EngineError(msg)
+
+
+def _resolve(kind: Engine) -> _Engine:
+    """Locate and load a built-in engine variant (cached by path)."""
+    name = _lib_filename() if kind is Engine.WIDE else _go_lib_filename()
+    paths = _candidate_paths(name)
+    for cand in paths:
+        if not cand:
+            continue
+        cached = _engines.get(os.path.realpath(cand))
+        if cached is not None:
+            return cached
+    ffi = _make_ffi()
+    err: Exception | None = None
+    try:
+        path, lib = _first_loadable(ffi, paths)
+    except Exception as exc:  # noqa: BLE001
+        path, lib, err = None, None, exc
+    if lib is None or path is None:
+        raise _not_found(kind, paths, err)
+    eng = _Engine(path, ffi, lib, kind)
+    _check_abi(eng)
+    _engines[os.path.realpath(path)] = eng
+    return eng
+
+
+def _load_file(path: str) -> _Engine:
+    real = os.path.realpath(path)
+    cached = _engines.get(real)
+    if cached is not None:
+        return cached
+    if not os.path.exists(path):
+        raise EngineError(f"engine not found: {path}")
+    ffi = _make_ffi()
+    try:
+        lib = ffi.dlopen(path)
+        lib.freetls_ping()
+    except Exception as exc:  # noqa: BLE001
+        raise EngineError(f"could not load engine {path}: {exc}") from exc
+    eng = _Engine(path, ffi, lib, None)
+    _check_abi(eng)
+    _engines[real] = eng
+    return eng
+
+
+def _current_engine() -> _Engine:
+    global _current
+    if _current is None:
+        _current = _resolve(Engine.WIDE)
+    return _current
+
+
+def _load():
+    eng = _current_engine()
+    return eng.ffi, eng.lib
+
+
+def use_engine(engine: Engine) -> EngineInfo:
+    """Switch the process to a built-in engine variant and return its info."""
+    global _current
+    if not isinstance(engine, Engine):
+        raise TypeError(
+            "use_engine() expects an Engine member (Engine.WIDE / Engine.GO); "
+            "use use_engine_file(path) for an explicit library"
+        )
+    _current = _resolve(engine)
+    return _current.info()
+
+
+def use_engine_file(path: str) -> EngineInfo:
+    """Switch the process to an explicit engine shared object."""
+    global _current
+    _current = _load_file(path)
+    return _current.info()
+
+
+def current_engine() -> EngineInfo:
+    """Info about the engine new sessions will use."""
+    return _current_engine().info()
+
+
+@contextmanager
+def engine_context(engine: Engine):
+    """Temporarily switch engines within a ``with`` block."""
+    global _current
+    previous = _current_engine()
+    _current = _resolve(engine)
+    try:
+        yield _current.info()
+    finally:
+        _current = previous
 
 
 _EXPECTED_ABI = 2
@@ -189,11 +260,16 @@ def abi_version() -> int:
     return int(lib.freetls_abi_version())
 
 
-def _cstr(ptr) -> str:
-    """Read a C string returned by the engine and free it (avoids leaks)."""
-    assert _ffi is not None and _lib is not None
-    text = _ffi.string(ptr).decode()
-    _lib.freetls_free(ptr)
+def _cstr(ptr, eng: _Engine | None = None) -> str:
+    """Read a C string returned by an engine and free it (avoids leaks).
+
+    Pass ``eng`` when the pointer came from a specific engine (e.g. a session's)
+    so it is freed by the same allocator even after an engine switch.
+    """
+    if eng is None:
+        eng = _current_engine()
+    text = eng.ffi.string(ptr).decode()
+    eng.lib.freetls_free(ptr)
     return text
 
 
@@ -343,13 +419,14 @@ class EngineSession:
     """Low-level handle to a single native TLS session."""
 
     def __init__(self, spec: dict):
-        ffi, lib = _load()
-        self._ffi = ffi
-        self._lib = lib
+        eng = _current_engine()
+        self._engine = eng
+        self._ffi = eng.ffi
+        self._lib = eng.lib
         spec_json = json.dumps(spec).encode()
-        self._handle = lib.freetls_session_new(spec_json)
+        self._handle = self._lib.freetls_session_new(spec_json)
         if self._handle <= 0:
-            reason = _cstr(lib.freetls_aux_error()) or "invalid spec"
+            reason = _cstr(self._lib.freetls_aux_error(), eng) or "invalid spec"
             raise EngineError(f"freetls_session_new failed: {reason}")
         self._closed = False
         self._freed = False
@@ -378,24 +455,24 @@ class EngineSession:
         return int(rc)
 
     def client_hello(self) -> bytes:
-        s = _cstr(self._lib.freetls_get_client_hello(self._handle))
+        s = _cstr(self._lib.freetls_get_client_hello(self._handle), self._engine)
         return bytes.fromhex(s) if s else b""
 
     def server_hello(self) -> bytes:
-        s = _cstr(self._lib.freetls_get_server_hello(self._handle))
+        s = _cstr(self._lib.freetls_get_server_hello(self._handle), self._engine)
         return bytes.fromhex(s) if s else b""
 
     def state(self) -> EngineState:
-        s = _cstr(self._lib.freetls_get_state(self._handle))
+        s = _cstr(self._lib.freetls_get_state(self._handle), self._engine)
         return EngineState.from_json(s)
 
     def last_error(self) -> str:
-        return _cstr(self._lib.freetls_last_error(self._handle))
+        return _cstr(self._lib.freetls_last_error(self._handle), self._engine)
 
     def h2_request(self, req: dict) -> dict:
         """Perform an HTTP/2 request with full fingerprint control."""
         payload = json.dumps(req).encode()
-        raw = _cstr(self._lib.freetls_h2_request(self._handle, payload))
+        raw = _cstr(self._lib.freetls_h2_request(self._handle, payload), self._engine)
         return json.loads(raw or "{}")
 
     def close(self) -> None:

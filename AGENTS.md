@@ -17,22 +17,31 @@ The approved plan lives in **`docs/route-b-plan.md`**; treat it as the source of
 truth (locked decisions D1–D11, fork/registration mechanics, crypto-bridge
 scope, safe-mode whitelist, risk table, and measured deviations).
 
-Status: **complete.** M1 (fork scaffolding), M2 (EVP AEAD + P1 + TLS 1.3 CCM),
-M3 (P2 Camellia-CBC), M4 (safe/unsafe mode, ABI 2) and M5 (packaging) are done.
-The wide engine completes **51** suites (27 Go-only + 24 Route B).
+Status: **complete.** The wide engine (**51** suites = 27 Go-only + 24 Route B)
+is now the **default**; the Go-only engine is an alternate selected at runtime
+via `freetls.use_engine(freetls.Engine.GO)`.
 
 - The uTLS fork is vendored at `native/third_party/utls` (a nested module; the
   top-level `native/go.mod` has the `replace`). Keep fork changes in **new files
   only** and re-run `tools/rebase_utls.sh` after bumping uTLS.
-- All libcrypto code is behind the `freetls_libcrypto` build tag. Build the wide
-  engine with `make libcrypto` (dynamic system libcrypto) or `make full`
-  (statically linked from the `native/third_party/openssl` submodule, symbols
-  hidden). The default `make native` stays Go-only. Run the fork's EVP tests with
-  `make test-libcrypto`.
+- All libcrypto code is behind the `freetls_libcrypto` build tag. `make native`
+  builds the **wide** engine by default (statically linked from the
+  `native/third_party/openssl` submodule, symbols hidden); `make native-go`
+  builds the Go-only engine and `make native-dynamic` a dynamic-libcrypto dev
+  build. There is **no runtime auto-build**. Switch engines at runtime with
+  `freetls.use_engine(Engine.WIDE | Engine.GO)`, `use_engine_file(path)` or the
+  `engine_context(...)` context manager; `current_engine()` returns an
+  `EngineInfo(kind, path)`. Run the fork's EVP tests with `make test-libcrypto`.
 - Route B e2e tests live in `tests/e2e/test_route_b_suites.py`; they build the
   wide engine and drive it via `tests/_route_b_client.py` in a subprocess (the
   cffi binding loads one engine per process). `tests/e2e/test_full_engine.py`
   covers the static link and interposition with Python `ssl`.
+- OpenSSL updates: the submodule is shallow (`.gitmodules` `shallow = true`).
+  Bump it with `make update-openssl TAG=openssl-x.y.z` (or
+  `tools/update_openssl.sh <tag>`), which shallow-fetches the tag, refreshes the
+  gitlink, and rebuilds. A stamp (`native/third_party/openssl/.freetls-built`,
+  holding the submodule commit + Configure args) makes `make native`
+  auto-rebuild when either changes.
 - Safe mode: `freetls.set_safe_mode` / `FingerprintSpec.safe`, validated in
   `src/freetls/safety.py`; the extension whitelist and backed ciphers come from
   the engine (`freetls.engine.supported_ciphers/_extensions`). Default is
@@ -57,12 +66,13 @@ All Python commands use the project venv (`.venv/`), not the system Python.
 
 `Makefile` is the source of truth; `PY`/`GO` are overridable (`make test PY=...
 GO=...`) and **auto-detected** (Python: `.venv` else `python3`; Go: `PATH` else
-`~/.local/go` and common dirs). The loader also **auto-builds** the engine from
-`native/` on first use when Go is available (`FREETLS_NO_AUTOBUILD=1` disables).
+`~/.local/go` and common dirs). The engine is built **only at install**
+(`make native` = wide default, `make native-go` = Go-only); the runtime loader
+never compiles anything.
 
 Relevant env vars: `FREETLS_LIB` (explicit `.so`), `FREETLS_GO` (Go binary),
-`FREETLS_NO_AUTOBUILD`, `FREETLS_SKIP_NATIVE` (build without engine), and
-`FREETLS_TCPDUMP` (pcap tests).
+`FREETLS_NO_OPENSSL` (build/install the Go-only engine), and `FREETLS_TCPDUMP`
+(pcap tests).
 
 Run a single test / file:
 
@@ -83,10 +93,10 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
    build with `FREETLS_LIB=$PWD/native/libfreetls.so`. Symptom: code changes /
    new engine symbols appear missing.
 2. **Engine edits need a rebuild.** Editing `native/*.go` does nothing until
-   `make native`. The committed/packaged `libfreetls.so` is a build artifact.
-   The pytest `engine_lib` fixture builds it on demand if missing and sets
-   `FREETLS_LIB` to `native/`; the runtime loader also auto-builds from
-   `native/` on first use (disable with `FREETLS_NO_AUTOBUILD=1`).
+   `make native` (wide) or `make native-go` (Go-only). The committed/packaged
+   `libfreetls.so` is a build artifact. The pytest `engine_lib` fixture builds
+   the wide engine via `make native` if it is missing; there is **no runtime
+   auto-build**.
 3. **pcap tests need privileges.** Capturing loopback requires a tcpdump with
    `cap_net_raw`. `/tmp` is `nosuid`, so capabilities only work on a copy under
    `$HOME` — `make setup-caps` installs `~/.local/freetls-deps/bin/tcpdump`.
@@ -189,9 +199,10 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - **Panic safety.** All C entrypoints (`session_new`, `handshake`, `read`,
   `write`, `chlo_raw`, `h2_request`, `preset_*`) wrap their bodies in
   `recover()` so a Go panic returns an error instead of aborting the host.
-- **C-ABI version.** `freetls_abi_version()` (currently `1`) is checked by
-  `_cffi._load()`; bump it on an incompatible export change and update
-  `_EXPECTED_ABI`. `native/fuzz_test.go` (`FuzzParseSpec`, `FuzzChloJSON`) and
+- **C-ABI version.** `freetls_abi_version()` (currently `2`) is checked by
+  `_cffi._check_abi()` when an engine is loaded (`_resolve`/`_load_file`); bump
+  it on an incompatible export change and update `_EXPECTED_ABI`.
+  `native/fuzz_test.go` (`FuzzParseSpec`, `FuzzChloJSON`) and
   `native/bench_test.go` cover the JSON/spec parsers. The session registry is
   mutex-guarded (thread-safe across sessions); a single `TLSSession` is not.
 - **Timeouts are engine-side.** `freetls_set_timeout` (ms) drives the Go read

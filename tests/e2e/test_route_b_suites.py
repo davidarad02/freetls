@@ -287,11 +287,11 @@ def test_camellia_cbc_implicit_iv(libcrypto_engine, rsa_certs, version, vmin, vm
     assert result["version"] in ("TLS1.0", "TLS1.1")
 
 
-def test_default_engine_cannot_complete_aria(rsa_certs):
-    """The default (Go-only) engine has no ARIA support, proving the widening."""
-    lib = NATIVE / "libfreetls.so"
+def test_go_engine_cannot_complete_aria(rsa_certs):
+    """The Go-only engine has no ARIA support, proving the widening."""
+    lib = NATIVE / "libfreetls_go.so"
     if not lib.exists():
-        pytest.skip("default engine not built")
+        pytest.skip("Go-only engine not built (run `make native-go`)")
     srv = _start_server(rsa_certs, "tls1_2", "ARIA128-GCM-SHA256", False)
     try:
         result = _run_client(str(lib), srv.port, [0xC050], TLS12, TLS12)

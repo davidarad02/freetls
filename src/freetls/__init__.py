@@ -5,6 +5,13 @@ from __future__ import annotations
 from . import modes, profiles, sse, verify
 from .constants import Cipher, ExtensionType, NamedGroup, SignatureScheme
 from .context import TLSContext
+from .engine import (
+    Engine,
+    current_engine,
+    engine_context,
+    use_engine,
+    use_engine_file,
+)
 from .engine import version as engine_version
 from .errors import (
     EngineError,
@@ -46,6 +53,11 @@ __version__ = "0.0.1"
 __all__ = [
     "__version__",
     "engine_version",
+    "Engine",
+    "use_engine",
+    "use_engine_file",
+    "current_engine",
+    "engine_context",
     "FingerprintSpec",
     "Extension",
     "set_default_verify",

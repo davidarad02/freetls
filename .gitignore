@@ -18,7 +18,11 @@ native/libfreetls.dylib
 native/libfreetls.h
 native/freetls.dll
 native/freetls.h
-# Route B wide engine (produced by `make libcrypto` / `make full`).
+# Go-only alternate engine (produced by `make native-go`).
+native/libfreetls_go.so
+native/libfreetls_go.dylib
+native/libfreetls_go.h
+# Wide dynamic engine (produced by `make native-dynamic`).
 native/libfreetls_libcrypto.so
 native/libfreetls_libcrypto.dylib
 native/libfreetls_libcrypto.h

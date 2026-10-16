@@ -1,3 +1,4 @@
 [submodule "native/third_party/openssl"]
 	path = native/third_party/openssl
 	url = https://github.com/openssl/openssl
+	shallow = true

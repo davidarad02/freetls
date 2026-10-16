@@ -69,10 +69,19 @@ third-party fingerprint services.
 - `cffi` (installed automatically).
 - Optional HTTP integrations: `requests` / `urllib3`, `httpx`, `aiohttp`.
 - Optional certificate parity: `cryptography`.
-- Only for **building from source / editable installs**: a **Go toolchain
-  (Go 1.27+)**. Prebuilt wheels bundle the compiled engine, so end users don't
-  need Go. Go is found via `$FREETLS_GO`, then `go` on `PATH`, then common
-  locations (`~/.local/go`, `/usr/local/go`, `/opt/go`, Homebrew).
+- **Prebuilt wheels bundle the compiled engine** (both the wide and the Go-only
+  builds), so end users need **no build tools**.
+- **Only for building from source / editable installs:**
+  - a **Go toolchain (Go 1.27+)**;
+  - a **C toolchain** (`gcc`/`cc`), **`perl`** and **`make`** — the default
+    *wide* engine links a static OpenSSL built from the
+    `native/third_party/openssl` submodule, whose `Configure` is a Perl script;
+  - **network access the first time**, to fetch that submodule (shallow);
+  - set **`FREETLS_NO_OPENSSL=1`** to build the **Go-only** engine instead, which
+    needs only Go (no perl/make/OpenSSL).
+
+  Go is found via `$FREETLS_GO`, then `go` on `PATH`, then common locations
+  (`~/.local/go`, `/usr/local/go`, `/opt/go`, Homebrew).
 
 ## Installation
 
@@ -90,20 +99,25 @@ pip install "freetls[test]"    # everything needed to run the test suite
 The easiest path sets up a virtualenv and builds the engine in one step:
 
 ```bash
-git clone <repo> && cd freetls
-make venv          # creates .venv, installs freetls[test], compiles the engine
+git clone --recurse-submodules --shallow-submodules --depth 1 <repo> && cd freetls
+make venv          # creates .venv, installs freetls[test], builds the WIDE engine
 .venv/bin/python -c "import freetls; print(freetls.engine_version())"
 ```
 
-Or, without `make`:
+`make venv` / `pip install .` build the **wide** engine by default (Go + a static
+OpenSSL `libcrypto`), fetching the OpenSSL submodule (shallow) and compiling it
+if needed. To build the dependency-free **Go-only** engine instead:
 
 ```bash
-pip install -e ".[test]"   # builds the engine during install (needs Go)
+FREETLS_NO_OPENSSL=1 pip install -e ".[test]"   # Go-only (no perl/make/OpenSSL)
+make native-go                                  # or, in a checkout
 ```
 
-If you just put `src/` on `PYTHONPATH` on a fresh clone, the engine is
-**built automatically on first use** when Go is available (disable with
-`FREETLS_NO_AUTOBUILD=1`). You can always build it explicitly with `make native`.
+There is **no runtime auto-build**: the engine is compiled at install time and
+merely loaded at runtime. Build it explicitly with `make native` (wide) or
+`make native-go` (Go-only); switch between them at runtime with
+`freetls.use_engine(freetls.Engine.GO)` (see
+[Wide cipher support](#wide-cipher-support-libcrypto)).
 
 The engine shared library is searched in this order: `$FREETLS_LIB`, then
 `src/freetls/_lib/`, then `native/`, then `build/`. See
@@ -510,25 +524,57 @@ The default is **unsafe**, for backward compatibility.
 
 ## Wide cipher support (libcrypto)
 
-The default engine is Go-only: it completes the suites Go `crypto/tls`
-implements (plus uTLS's legacy ChaCha20), 27 in total. A second, **wide** engine
-links an OpenSSL `libcrypto` (EVP) backend and adds 24 suites — ARIA-GCM,
-AES-CCM / CCM_8, Camellia-CBC, and TLS 1.3 CCM — for **51** completable suites:
+The **default** engine is the **wide** engine: it completes the suites Go
+`crypto/tls` implements (plus uTLS's legacy ChaCha20) *and* links an OpenSSL
+`libcrypto` (EVP) backend that adds 24 suites — ARIA-GCM, AES-CCM / CCM_8,
+Camellia-CBC, and TLS 1.3 CCM — for **51** completable suites. The Go-only
+engine (27 suites) is built as an alternate:
 
 ```bash
-make libcrypto   # wide engine, dynamic system libcrypto (dev/test)
-make full        # wide engine, libcrypto linked STATICALLY from the OpenSSL submodule
+make native          # default: WIDE engine, static libcrypto (symbol-hidden)
+make native-go       # alternate: Go-only engine (no OpenSSL)
+make native-dynamic  # dev: wide engine, dynamic system libcrypto
 ```
 
-`make full` builds `native/third_party/openssl` (a pinned OpenSSL 3.5.5 git
-submodule) as a static PIC `libcrypto.a`, links it into `libfreetls.so` with
-hidden symbols (`-Wl,-Bsymbolic -Wl,--exclude-libs,ALL`), and depends on no
-system `libcrypto`. `FREETLS_FULL=1 pip wheel .` bundles that engine so
-installed users need no build; a plain `git clone && pip install .` builds the
-Go-only engine and needs no OpenSSL.
+`make native` (and `pip install .`) build `native/third_party/openssl` — a pinned
+OpenSSL 3.5.5 git submodule — as a static PIC `libcrypto.a`, link it into
+`libfreetls.so` with hidden symbols (`-Wl,-Bsymbolic -Wl,--exclude-libs,ALL`),
+and depend on no system `libcrypto`. Wheels bundle **both** engines.
 
-Offered suites can be inspected with `freetls.engine.supported_ciphers()`; the
-safe-mode extension whitelist with `freetls.engine.supported_extensions()`.
+Switch engines at runtime (no restart) with the string-free API:
+
+```python
+import freetls
+freetls.use_engine(freetls.Engine.GO)      # 27 suites
+freetls.use_engine(freetls.Engine.WIDE)    # 51 suites (default)
+with freetls.engine_context(freetls.Engine.GO):   # scoped, restored on exit
+    ...
+print(freetls.current_engine())            # EngineInfo(kind, path)
+```
+
+Live sessions keep the engine they were created with; new sessions use the
+current engine. Offered suites can be inspected with
+`freetls.engine.supported_ciphers()`; the safe-mode extension whitelist with
+`freetls.engine.supported_extensions()`.
+
+### Updating OpenSSL
+
+The OpenSSL source is a pinned, **shallow** git submodule
+(`native/third_party/openssl`). To move to a newer release and rebuild
+transparently:
+
+```bash
+make update-openssl TAG=openssl-3.5.6
+# or: tools/update_openssl.sh openssl-3.5.6
+```
+
+This shallow-fetches the tag, updates the submodule pointer, and rebuilds
+`libcrypto.a` + the wide engine, printing the old → new version. The Makefile
+records the submodule commit + Configure args in a stamp
+(`native/third_party/openssl/.freetls-built`), so `make native` **auto-rebuilds**
+whenever the submodule commit or the Configure flags change (e.g. after a
+`git submodule update`). Always rebuild/republish wheels after bumping OpenSSL so
+security fixes are picked up.
 
 ---
 
@@ -1040,8 +1086,7 @@ Environment knobs (all optional):
 |----------|--------|
 | `FREETLS_GO` | Path to the Go binary for source builds/tests |
 | `FREETLS_LIB` | Explicit path to `libfreetls.so` (skip discovery) |
-| `FREETLS_NO_AUTOBUILD` | Disable building the engine on first use |
-| `FREETLS_SKIP_NATIVE` | Build/install without the native engine (docs only) |
+| `FREETLS_NO_OPENSSL` | Build/install the Go-only engine (no perl/make/OpenSSL) |
 | `FREETLS_TCPDUMP` | tcpdump used by pcap tests |
 
 Run one test/file:
@@ -1064,21 +1109,21 @@ A wheel build copies the engine to `src/freetls/_lib/libfreetls.so`, which
 *shadows* `native/libfreetls.so`. Delete it (`make clean`) or point the loader at
 the fresh build: `FREETLS_LIB=$PWD/native/libfreetls.so`.
 
-**"Could not load the native freetls engine."**
-The loader auto-builds it from `native/` on first use when Go is present
-(disable with `FREETLS_NO_AUTOBUILD=1`). Otherwise run `make native`, install the
-prebuilt wheel, or set `FREETLS_LIB=/path/to/libfreetls.so`. Search order:
-`$FREETLS_LIB` → `src/freetls/_lib` → `native/` → `build/`.
+**"Could not load the freetls engine."**
+The engine is built at install time (there is **no** runtime auto-build). Run
+`make native` (wide) or `make native-go` (Go-only), install the prebuilt wheel,
+or set `FREETLS_LIB=/path/to/libfreetls.so`. Search order: `$FREETLS_LIB` →
+`src/freetls/_lib` → `native/` → `build/`.
 
 **Editing `native/*.go` has no effect.**
 The `.so` is a build artifact; run `make native` (or `go build -buildmode=c-shared`)
 and make sure no stale copy shadows it in `src/freetls/_lib/`.
 
-**`pip install .` / the first import fails with a Go error.**
-Install Go (1.27+), point at it with `FREETLS_GO=/path/to/go`, or install the
-prebuilt wheel. Builds fetch Go modules, so a network connection is needed the
-first time (or `cd native && go mod download` ahead of time). To build without
-the engine (docs only): `FREETLS_SKIP_NATIVE=1 pip install .`.
+**`pip install .` fails while building the engine.**
+The default wide engine needs Go (1.27+), a C toolchain, `perl`, `make`, and
+network the first time (to fetch the OpenSSL submodule). Install them, point at
+Go with `FREETLS_GO=/path/to/go`, or build the Go-only engine with
+`FREETLS_NO_OPENSSL=1 pip install .`.
 
 **pcap tests are skipped.**
 They need a tcpdump able to capture loopback. Run `make setup-caps` once
@@ -1113,11 +1158,11 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
   accept them; modern servers will refuse, as expected.
 - **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot
   produce more than ~2^48 distinct values per part.
-- **Cipher completion is bounded by the backend.** The default engine completes
-  only Go's suites (27). The wide engine (`make libcrypto` / `make full`) adds
-  ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM (51 total). DHE/DSS,
-  anonymous and PSK/SRP/GOST suites, and suites OpenSSL 3.5.5 does not
-  implement, are out of scope. TLS 1.3 CCM is implemented but no local
-  OpenSSL/Go server negotiates it (covered at the AEAD level).
+- **Cipher completion is bounded by the backend.** The default (wide) engine
+  completes 51 suites; the Go-only alternate completes 27. The wide engine adds
+  ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM. DHE/DSS, anonymous and
+  PSK/SRP/GOST suites, and suites OpenSSL 3.5.5 does not implement, are out of
+  scope. TLS 1.3 CCM is implemented but no local OpenSSL/Go server negotiates it
+  (covered at the AEAD level).
 - Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
   system on those platforms; this checkout is exercised on Linux/CPython 3.14.

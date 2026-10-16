@@ -97,13 +97,18 @@ def write_map(names: list[str]) -> None:
         fh.write(HEADER + body + FOOTER)
 
 
+# Preset buildability is independent of the crypto backend, so we use the small
+# Go-only engine here and never clobber the default (wide) libfreetls.so.
+GO_LIB = "libfreetls_go.so"
+
+
 def build(go: str) -> None:
     env = dict(os.environ)
     env.setdefault("GOPATH", os.path.expanduser("~/go"))
     env["CGO_ENABLED"] = "1"
     env["PATH"] = os.path.dirname(go) + os.pathsep + env.get("PATH", "")
     subprocess.run(
-        [go, "build", "-buildmode=c-shared", "-o", "libfreetls.so", "."],
+        [go, "build", "-buildmode=c-shared", "-o", GO_LIB, "."],
         cwd=NATIVE,
         check=True,
         env=env,
@@ -113,7 +118,7 @@ def build(go: str) -> None:
 def unbuildable() -> list[str]:
     """Ask the freshly built engine which presets fail to produce a ClientHello."""
     sys.path.insert(0, SRC)
-    os.environ["FREETLS_LIB"] = os.path.join(NATIVE, "libfreetls.so")
+    os.environ["FREETLS_LIB"] = os.path.join(NATIVE, GO_LIB)
     try:
         from freetls import engine
     except Exception as exc:  # noqa: BLE001

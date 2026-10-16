@@ -69,18 +69,12 @@ def _find_go() -> str | None:
 def engine_lib() -> str:
     lib = NATIVE / _lib_name()
     if not lib.exists():
-        go = _find_go()
-        if go is None:
-            pytest.skip("native engine not built and Go unavailable")
-        env = dict(os.environ)
-        env.setdefault("GOPATH", os.path.expanduser("~/go"))
-        env["CGO_ENABLED"] = "1"
-        subprocess.run(
-            [go, "build", "-buildmode=c-shared", "-o", lib.name, "."],
-            cwd=NATIVE,
-            check=True,
-            env=env,
-        )
+        # Build the default (wide) engine via the Makefile, which checks for
+        # perl/make/gcc and the OpenSSL submodule.
+        try:
+            subprocess.run(["make", "native"], cwd=ROOT, check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:  # pragma: no cover
+            pytest.skip(f"could not build the wide engine ({exc}); run `make native`")
     os.environ["FREETLS_LIB"] = str(lib)
     return str(lib)
 
