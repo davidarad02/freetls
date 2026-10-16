@@ -63,56 +63,66 @@ def _open(
     headers.setdefault("Host", url.netloc.decode("latin-1"))
     body = request.read()
 
+    session: TLSSession | QUICSession
     if http3:
         if proxy:
             raise httpx.UnsupportedProtocol("HTTP/3 over a proxy is not supported")
-        session: TLSSession | QUICSession = QUICSession(spec)
-        session.connect(host, port, server_hostname=spec.server_name or host)
-        resp = _http3.execute(session, request.method, path, headers, body)
-        reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
-        return (
-            session,
-            _http3.status_of(resp),
-            _http3.header_tuples(resp),
-            b"",
-            "HTTP/3",
-            reader,
-        )
-
-    session = TLSSession(spec)
-    if proxy:
-        from .proxy import open_tunnel
-
-        sock = open_tunnel(proxy, host, port)
-        session.wrap_socket(sock, server_hostname=spec.server_name or host)
+        session = QUICSession(spec)
     else:
-        session.connect(host, port, server_hostname=spec.server_name or host)
+        session = TLSSession(spec)
 
-    if _http2.negotiated_h2(session):
-        resp = _http2.execute(session, request.method, path, headers, body)
-        reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
-        return (
-            session,
-            _http2.status_of(resp),
-            _http2.header_tuples(resp),
-            b"",
-            "HTTP/2",
-            reader,
-        )
+    try:
+        if http3:
+            session.connect(host, port, server_hostname=spec.server_name or host)
+            resp = _http3.execute(session, request.method, path, headers, body)
+            reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
+            return (
+                session,
+                _http3.status_of(resp),
+                _http3.header_tuples(resp),
+                b"",
+                "HTTP/3",
+                reader,
+            )
 
-    conn = http.client.HTTPConnection(host, port)
-    conn.sock = session  # http.client will skip connect() when sock is set
-    conn.request(request.method, path, body=body, headers=headers)
-    resp = conn.getresponse()
+        if proxy:
+            from .proxy import open_tunnel
 
-    def close() -> None:
-        try:
-            resp.close()
-        finally:
-            session.close()
+            sock = open_tunnel(proxy, host, port)
+            session.wrap_socket(sock, server_hostname=spec.server_name or host)
+        else:
+            session.connect(host, port, server_hostname=spec.server_name or host)
 
-    reader = _Reader(getattr(resp, "read1", resp.read), close)
-    return session, resp.status, resp.getheaders(), b"", "HTTP/1.1", reader
+        if _http2.negotiated_h2(session):
+            resp = _http2.execute(session, request.method, path, headers, body)
+            reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
+            return (
+                session,
+                _http2.status_of(resp),
+                _http2.header_tuples(resp),
+                b"",
+                "HTTP/2",
+                reader,
+            )
+
+        conn = http.client.HTTPConnection(host, port)
+        conn.sock = session  # http.client will skip connect() when sock is set
+        conn.request(request.method, path, body=body, headers=headers)
+        resp = conn.getresponse()
+
+        def close() -> None:
+            try:
+                resp.close()
+            finally:
+                session.close()
+
+        reader = _Reader(getattr(resp, "read1", resp.read), close)
+        return session, resp.status, resp.getheaders(), b"", "HTTP/1.1", reader
+    except BaseException:
+        # Never leak the native session when the request fails before the reader
+        # (which closes it) is handed back.
+        session.close()
+        raise
 
 
 def _iter_reader(reader: _Reader) -> Iterator[bytes]:

@@ -71,6 +71,14 @@ type quicState struct {
 	dg   map[quic.StreamID]*http3.RequestStream
 }
 
+// quicPtr returns the session's QUIC state under the session lock, so a
+// concurrent close() from another thread cannot race the pointer read.
+func (s *session) quicPtr() *quicState {
+	s.quicMu.RLock()
+	defer s.quicMu.RUnlock()
+	return s.quic
+}
+
 func hexOrEmpty(s string) ([]byte, error) {
 	if s == "" {
 		return nil, nil
@@ -202,11 +210,23 @@ func applyQuicInitial(spec *quic.QUICSpec, qi *quicInitialJSON) error {
 // produces, offline. uQUIC feeds the same spec to uTLS's UQUICClient, so these
 // are the bytes that go into the Initial packet's CRYPTO frame — which is what
 // the reported JA4q is computed from.
-func marshalClientHello(chs *utls.ClientHelloSpec) ([]byte, error) {
-	uconn := utls.UClient(dummyConn{}, &utls.Config{ServerName: "example.com"}, utls.HelloCustom)
+//
+// cfg must be the config the handshake will use: uTLS fills an empty SNI
+// extension from config.ServerName, so using a different ServerName here would
+// report an SNI the wire does not carry (e.g. connecting by IP). The config is
+// cloned because UClient does not clone it and ApplyPreset mutates ServerName.
+func marshalClientHello(chs *utls.ClientHelloSpec, cfg *utls.Config) ([]byte, error) {
+	if cfg == nil {
+		cfg = &utls.Config{}
+	}
+	uconn := utls.UClient(dummyConn{}, cfg.Clone(), utls.HelloCustom)
 	if err := uconn.ApplyPreset(chs); err != nil {
 		return nil, err
 	}
+	// QUIC carries no legacy_session_id (RFC 9001 §8.4). ApplyPreset only skips
+	// it for a QUIC UConn, and this is a plain UClient, so clear it explicitly to
+	// match the emitted bytes.
+	uconn.HandshakeState.Hello.SessionId = nil
 	if err := uconn.MarshalClientHello(); err != nil {
 		return nil, err
 	}
@@ -241,24 +261,37 @@ func setALPNOnSpec(chs *utls.ClientHelloSpec, protocols []string) {
 // closeQUIC releases a session's QUIC resources. Safe to call on a session that
 // never ran a QUIC handshake.
 func closeQUIC(s *session) {
-	if s == nil || s.quic == nil {
+	if s == nil {
 		return
 	}
-	if s.quic.conn != nil {
-		_ = s.quic.conn.CloseWithError(0, "")
-	}
-	if s.quic.pc != nil {
-		_ = s.quic.pc.Close()
-	}
+	s.quicMu.Lock()
+	qs := s.quic
 	s.quic = nil
+	s.quicMu.Unlock()
+	if qs == nil {
+		return
+	}
+	if qs.cc != nil {
+		_ = qs.cc.CloseWithError(0, "")
+	}
+	if qs.conn != nil {
+		_ = qs.conn.CloseWithError(0, "")
+	}
+	if qs.pc != nil {
+		_ = qs.pc.Close()
+	}
 }
 
 // quicAuthority returns the peer's host:port for the :authority pseudo-header.
 func (s *session) quicAuthority() string {
-	if s == nil || s.quic == nil || s.quic.remote == nil {
+	if s == nil {
 		return ""
 	}
-	return s.quic.remote.String()
+	qs := s.quicPtr()
+	if qs == nil || qs.remote == nil {
+		return ""
+	}
+	return qs.remote.String()
 }
 
 // quicRemoteAddr builds the peer address. Python resolves the host and passes
@@ -303,6 +336,9 @@ func ensureInitialSourceCID(spec *quic.QUICSpec) error {
 			if _, ok := p.(utls.InitialSourceConnectionID); ok {
 				return nil
 			}
+			if fp, ok := p.(*utls.FakeQUICTransportParameter); ok && fp.Id == 0x0f {
+				return nil
+			}
 		}
 		for _, id := range spec.SuppressTransportParameters {
 			if id == 0x0f {
@@ -336,6 +372,9 @@ func ensureMaxDatagramFrameSize(spec *quic.QUICSpec) error {
 		}
 		for _, p := range qtp.TransportParameters {
 			if _, ok := p.(utls.MaxDatagramFrameSize); ok {
+				return nil
+			}
+			if fp, ok := p.(*utls.FakeQUICTransportParameter); ok && fp.Id == 0x20 {
 				return nil
 			}
 		}
@@ -399,8 +438,12 @@ func quicSpecFor(s *session) (*quic.QUICSpec, error) {
 //
 //export freetls_quic_handshake
 func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, port C.int) (rc C.int) {
+	var pc net.PacketConn
 	defer func() {
 		if r := recover(); r != nil {
+			if pc != nil {
+				_ = pc.Close()
+			}
 			if s := getSession(int64(h)); s != nil {
 				cErr(s, fmt.Errorf("panic: %v", r))
 			}
@@ -419,7 +462,8 @@ func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, p
 		cErr(s, errors.New("bad fd"))
 		return -2
 	}
-	pc, err := net.FilePacketConn(f)
+	var err error
+	pc, err = net.FilePacketConn(f)
 	_ = f.Close() // FilePacketConn dups the fd; close our wrapper/dup
 	if err != nil {
 		cErr(s, fmt.Errorf("FilePacketConn: %w", err))
@@ -437,7 +481,7 @@ func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, p
 		cErr(s, err)
 		return -5
 	}
-	if raw, err := marshalClientHello(qspec.ClientHelloSpec); err == nil {
+	if raw, err := marshalClientHello(qspec.ClientHelloSpec, s.config); err == nil {
 		s.quicCH = raw
 	} else {
 		cErr(s, fmt.Errorf("marshal quic ClientHello: %w", err))
@@ -452,14 +496,22 @@ func freetls_quic_handshake(h C.longlong, fd C.int, sni *C.char, host *C.char, p
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	qcfg := &quic.Config{EnableDatagrams: s.quicDgram}
+	// QuicInitialSpec.version selects the QUIC version (v1 by default).
+	if s.qinit != nil && s.qinit.Version != 0 {
+		qcfg.Versions = []quic.Version{quic.Version(s.qinit.Version)}
+	}
+
 	tr := &quic.UTransport{Transport: &quic.Transport{Conn: pc}, QUICSpec: qspec}
-	conn, err := dialQUIC(ctx, tr, remote, s.config, pc, &quic.Config{EnableDatagrams: s.quicDgram})
+	conn, err := dialQUIC(ctx, tr, remote, s.config, pc, qcfg)
 	if err != nil {
 		_ = pc.Close()
 		cErr(s, err)
 		return -8
 	}
+	s.quicMu.Lock()
 	s.quic = &quicState{pc: pc, tr: tr, conn: conn, spec: qspec, remote: remote, datagrams: s.quicDgram}
+	s.quicMu.Unlock()
 	s.quicSH = conn.FreetlsServerHello()
 	return 0
 }
@@ -558,7 +610,7 @@ func freetls_quic_id_raw(name *C.char, noSNI C.int, alpnJSON *C.char) (out *C.ch
 		}
 		setALPNOnSpec(chs, protocols)
 	}
-	raw, err := marshalClientHello(chs)
+	raw, err := marshalClientHello(chs, &utls.Config{ServerName: "example.com"})
 	if err != nil {
 		auxErr = err.Error()
 		return C.CString("")

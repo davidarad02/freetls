@@ -9,22 +9,7 @@ from __future__ import annotations
 
 from ._http2 import _HOP_BY_HOP, header_tuples, status_of
 
-__all__ = ["negotiated_h3", "negotiated_protocol", "execute", "header_tuples", "status_of"]
-
-
-def negotiated_h3(session) -> bool:
-    """True when the connection negotiated HTTP/3 via ALPN."""
-    try:
-        return session.selected_alpn_protocol() == "h3"
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def negotiated_protocol(session) -> str | None:
-    """Return ``"h3"``, ``"h2"`` or ``None`` for the session's ALPN."""
-    from ._http2 import negotiated_protocol as _np
-
-    return _np(session)
+__all__ = ["execute", "header_tuples", "status_of"]
 
 
 def execute(

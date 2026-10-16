@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http/httpguts"
+
 	quic "github.com/refraction-networking/uquic"
 	"github.com/refraction-networking/uquic/http3"
 )
@@ -52,12 +54,18 @@ type h3Response struct {
 // use. It wraps the connection the handshake established, so no new socket is
 // created and the QUIC/HTTP-3 fingerprints keep coming from the same connection.
 func (s *session) h3Client() (*http3.ClientConn, error) {
-	if s == nil || s.quic == nil || s.quic.conn == nil {
+	if s == nil {
 		return nil, errors.New("no active QUIC session")
 	}
-	qs := s.quic
+	qs := s.quicPtr()
+	if qs == nil || qs.conn == nil {
+		return nil, errors.New("no active QUIC session")
+	}
 	qs.ccOnce.Do(func() {
-		tr := &http3.Transport{EnableDatagrams: qs.datagrams}
+		// DisableCompression keeps the client from injecting an
+		// Accept-Encoding header and transparently un-gzipping responses, so an
+		// H3 request carries exactly the caller's headers (like the H2 path).
+		tr := &http3.Transport{EnableDatagrams: qs.datagrams, DisableCompression: true}
 		qs.cc = tr.NewClientConn(qs.conn)
 	})
 	return qs.cc, nil
@@ -93,6 +101,24 @@ func buildH3Request(s *session, req h3RequestSpec, body io.Reader) (*http.Reques
 	hreq.Host = authority
 	for _, h := range req.Headers {
 		hreq.Header.Add(h[0], h[1])
+	}
+	// Validate headers up front. http3's ClientConn.RoundTrip does not (the
+	// Transport does), and a bad header would otherwise be dropped and the
+	// request would hang until the deadline with a misleading error.
+	for k, vv := range hreq.Header {
+		if !httpguts.ValidHeaderFieldName(k) {
+			return nil, fmt.Errorf("invalid http header field name %q", k)
+		}
+		for _, v := range vv {
+			if !httpguts.ValidHeaderFieldValue(v) {
+				return nil, fmt.Errorf("invalid http header field value %q for key %v", v, k)
+			}
+		}
+	}
+	// Suppress uQUIC's default "user-agent: quic-go HTTP/3": an empty value is
+	// omitted, so an H3 request carries exactly the caller's headers.
+	if _, ok := hreq.Header["User-Agent"]; !ok {
+		hreq.Header["User-Agent"] = []string{""}
 	}
 	return hreq, nil
 }
@@ -166,7 +192,7 @@ func freetls_h3_request(h C.longlong, reqJSON *C.char) (out *C.char) {
 		}
 	}()
 	s := getSession(int64(h))
-	if s == nil || s.quic == nil {
+	if s == nil || s.quicPtr() == nil {
 		return C.CString(`{"error":"no active QUIC session"}`)
 	}
 	var req h3RequestSpec
@@ -200,10 +226,14 @@ func freetls_h3_datagram_open(h C.longlong, reqJSON *C.char) (out *C.char) {
 		}
 	}()
 	s := getSession(int64(h))
-	if s == nil || s.quic == nil {
+	if s == nil {
 		return C.CString(`{"error":"no active QUIC session"}`)
 	}
-	if !s.quic.datagrams {
+	qs := s.quicPtr()
+	if qs == nil {
+		return C.CString(`{"error":"no active QUIC session"}`)
+	}
+	if !qs.datagrams {
 		return C.CString(`{"error":"datagrams are not enabled for this session"}`)
 	}
 	var req h3RequestSpec
@@ -237,23 +267,27 @@ func freetls_h3_datagram_open(h C.longlong, reqJSON *C.char) (out *C.char) {
 		return C.CString(string(b))
 	}
 	flow := uint64(str.StreamID())
-	s.quic.dgMu.Lock()
-	if s.quic.dg == nil {
-		s.quic.dg = map[quic.StreamID]*http3.RequestStream{}
+	qs.dgMu.Lock()
+	if qs.dg == nil {
+		qs.dg = map[quic.StreamID]*http3.RequestStream{}
 	}
-	s.quic.dg[str.StreamID()] = str
-	s.quic.dgMu.Unlock()
+	qs.dg[str.StreamID()] = str
+	qs.dgMu.Unlock()
 	b, _ := json.Marshal(map[string]any{"flow": flow})
 	return C.CString(string(b))
 }
 
 func h3DatagramStream(s *session, flow uint64) (*http3.RequestStream, error) {
-	if s == nil || s.quic == nil {
+	if s == nil {
 		return nil, errors.New("no active QUIC session")
 	}
-	s.quic.dgMu.Lock()
-	defer s.quic.dgMu.Unlock()
-	str, ok := s.quic.dg[quic.StreamID(flow)]
+	qs := s.quicPtr()
+	if qs == nil {
+		return nil, errors.New("no active QUIC session")
+	}
+	qs.dgMu.Lock()
+	defer qs.dgMu.Unlock()
+	str, ok := qs.dg[quic.StreamID(flow)]
 	if !ok {
 		return nil, fmt.Errorf("unknown datagram flow %d", flow)
 	}
@@ -313,4 +347,37 @@ func freetls_h3_datagram_recv(h C.longlong, flow C.longlong, timeoutMS C.int) (o
 	}
 	b, _ := json.Marshal(map[string]any{"data_b64": base64.StdEncoding.EncodeToString(data)})
 	return C.CString(string(b))
+}
+
+// freetls_h3_datagram_close releases a datagram flow: it removes the stream from
+// the session's flow table and cancels both directions, so the peer's stream
+// limit is not exhausted by long-lived flows. It is idempotent.
+//
+//export freetls_h3_datagram_close
+func freetls_h3_datagram_close(h C.longlong, flow C.longlong) (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			b, _ := json.Marshal(map[string]any{"error": fmt.Sprintf("panic: %v", r)})
+			out = C.CString(string(b))
+		}
+	}()
+	s := getSession(int64(h))
+	if s == nil {
+		return C.CString(`{"error":"no active QUIC session"}`)
+	}
+	qs := s.quicPtr()
+	if qs == nil {
+		return C.CString(`{"error":"no active QUIC session"}`)
+	}
+	qs.dgMu.Lock()
+	str, ok := qs.dg[quic.StreamID(flow)]
+	if ok {
+		delete(qs.dg, quic.StreamID(flow))
+	}
+	qs.dgMu.Unlock()
+	if ok {
+		str.CancelWrite(quic.StreamErrorCode(0))
+		str.CancelRead(quic.StreamErrorCode(0))
+	}
+	return C.CString("{}")
 }

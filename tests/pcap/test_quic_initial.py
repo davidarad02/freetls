@@ -105,3 +105,23 @@ def test_wire_quic_ja4q_matches_for_preset(capture_udp, h3_server):
     hellos = _quic.client_hellos(path, h3_server.port)
     assert hellos, "no QUIC Initial captured on the wire"
     assert freetls.ja4_from_bytes(hellos[0], transport="q")["ja4"] == reported_ja4q
+
+
+def test_wire_quic_ja4q_matches_without_sni(capture_udp, h3_server):
+    """Connecting by IP sends no SNI; the reported JA4q must match the wire.
+
+    Regression for a bug where the offline build used a fixed ServerName, so it
+    always carried an SNI the wire omitted (a different JA4q flag and ext count).
+    """
+    path = capture_udp(h3_server.port, "quic_nosni.pcap")
+    spec = FingerprintSpec(quic_id="QUICFirefox_116")  # no server_name -> no SNI
+    with freetls.QUICSession(spec) as session:
+        session.connect("127.0.0.1", h3_server.port, timeout=15)  # no server_hostname
+        reported_ja4q = session.ja4q
+    time.sleep(0.6)
+
+    hellos = _quic.client_hellos(path, h3_server.port)
+    assert hellos, "no QUIC Initial captured on the wire"
+    wire = freetls.ja4_from_bytes(hellos[0], transport="q")["ja4"]
+    assert wire == reported_ja4q
+    assert wire[3] == "i"  # the no-SNI flag in JA4_a (q<ver><sni>...)

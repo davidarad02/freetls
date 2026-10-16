@@ -281,6 +281,51 @@ def h3_server(certs, tmp_path_factory):
                 proc.kill()
 
 
+@pytest.fixture()
+def h3_server_v6(certs, tmp_path_factory):
+    """A local HTTP/3 server bound to IPv6 loopback ([::1])."""
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as probe:
+            probe.bind(("::1", 0))
+    except OSError:
+        pytest.skip("IPv6 loopback not available")
+    go = _find_go()
+    if go is None:
+        pytest.skip("Go toolchain not available")
+    cert, key = certs
+    src = Path(__file__).resolve().parent / "servers" / "go_http3"
+    binary = tmp_path_factory.mktemp("gobin6") / "go_http3"
+    env = dict(os.environ)
+    env.setdefault("GOPATH", os.path.expanduser("~/go"))
+    try:
+        subprocess.run([go, "build", "-o", str(binary), "."], cwd=src, check=True, env=env)
+    except subprocess.CalledProcessError:
+        pytest.skip("could not build the HTTP/3 test server")
+    with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
+        s.bind(("::1", 0))
+        port = s.getsockname()[1]
+    proc = subprocess.Popen(
+        [str(binary), f"[::1]:{port}", cert, key],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(50):
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+    if proc.poll() is not None:
+        pytest.skip("HTTP/3 IPv6 test server failed to start")
+    try:
+        yield TLSServer(proc, port)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
 @pytest.fixture(scope="session")
 def tcpdump_bin() -> str:
     """Locate a tcpdump capable of capturing loopback, else skip.

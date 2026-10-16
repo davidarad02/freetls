@@ -207,6 +207,7 @@ type session struct {
 	quicID    string
 	qinit     *quicInitialJSON
 	quic      *quicState
+	quicMu    sync.RWMutex
 	quicCH    []byte
 	quicSH    []byte
 	quicEarly bool
@@ -1165,7 +1166,7 @@ func freetls_get_client_hello(h C.longlong) (rc *C.char) {
 	}
 	// A QUIC session has no TLS record layer; the ClientHello is the one the
 	// QUIC stack marshalled (see freetls_quic_handshake).
-	if s.quic != nil {
+	if s.quicPtr() != nil {
 		return hexOf(s.quicCH)
 	}
 	if s.tee == nil {
@@ -1188,7 +1189,7 @@ func freetls_get_server_hello(h C.longlong) (rc *C.char) {
 	}
 	// QUIC has no TLS record stream; the ServerHello is captured by the fork's
 	// QUIC Initial-level hook (see freetls_quic_server_hello.go).
-	if s.quic != nil {
+	if s.quicPtr() != nil {
 		return hexOf(s.quicSH)
 	}
 	if s.tee == nil {
@@ -1224,9 +1225,10 @@ func freetls_get_state(h C.longlong) (rc *C.char) {
 		return C.CString("{}")
 	}
 	st := stateJSON{Error: s.lastErr}
+	qs := s.quicPtr()
 	switch {
-	case s.quic != nil && s.quic.conn != nil:
-		fillState(&st, s.quic.conn.ConnectionState().TLS)
+	case qs != nil && qs.conn != nil:
+		fillState(&st, qs.conn.ConnectionState().TLS)
 	case s.uconn != nil:
 		fillState(&st, s.uconn.ConnectionState())
 	}

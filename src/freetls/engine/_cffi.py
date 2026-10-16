@@ -42,6 +42,7 @@ char *freetls_h3_request(long long, const char *);
 char *freetls_h3_datagram_open(long long, const char *);
 char *freetls_h3_datagram_send(long long, long long, const char *);
 char *freetls_h3_datagram_recv(long long, long long, int);
+char *freetls_h3_datagram_close(long long, long long);
 char *freetls_supported_ciphers(void);
 char *freetls_supported_extensions(void);
 char *freetls_spec_raw(const char *);
@@ -549,6 +550,10 @@ class EngineSession:
             self._lib.freetls_h3_datagram_recv(self._handle, int(flow), int(timeout_ms)),
             self._engine,
         )
+        return json.loads(raw or "{}")
+
+    def h3_datagram_close(self, flow: int) -> dict:
+        raw = _cstr(self._lib.freetls_h3_datagram_close(self._handle, int(flow)), self._engine)
         return json.loads(raw or "{}")
 
     def close(self) -> None:

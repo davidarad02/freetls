@@ -51,6 +51,13 @@ def test_initial_key_schedule_rfc9001_a1():
     assert hp.hex() == "9f50449e04a0e810283a1e9933adedd2"
 
 
+def test_initial_key_schedule_rfc9369_a1():
+    key, iv, hp = initial_keys(Q.QUIC_V2, bytes.fromhex("8394c8f03e515708"))
+    assert key.hex() == "8b1a0bc121284290a29e0971b5cd045d"
+    assert iv.hex() == "91f73e2351d8fa91660e909f"
+    assert hp.hex() == "45b95e15235d6f45a6b19cbcb0294ba9"
+
+
 def test_unsupported_version_rejected():
     with pytest.raises(QuicParseError, match="unsupported QUIC version"):
         initial_keys(0xDEADBEEF, b"\x00" * 8)
@@ -92,6 +99,25 @@ def test_parse_initial_roundtrip():
     assert hello in initial.frames
 
 
+def test_parse_initial_v2_roundtrip():
+    """RFC 9369: a v2 Initial (type bits 0b01) must parse like a v1 one."""
+    hello = _quic_client_hello()
+    packet = Q.build_quic_initial(hello, version=Q.QUIC_V2, scid=b"\xaa", packet_number=2)
+    assert ((packet[0] >> 4) & 0x03) == 0b01
+    initial = parse_initial(packet)
+    assert initial.version == Q.QUIC_V2
+    assert initial.packet_number == 2
+    assert hello in initial.frames
+    ch = parse_quic_client_hello([packet])
+    assert ch.server_names == ["example.com"]
+
+
+def test_v2_keys_differ_from_v1():
+    v1 = initial_keys(QUIC_VERSION_1, bytes.fromhex("8394c8f03e515708"))
+    v2 = initial_keys(Q.QUIC_V2, bytes.fromhex("8394c8f03e515708"))
+    assert v1 != v2
+
+
 def test_parse_quic_client_hello_fields():
     hello = _quic_client_hello()
     ch = parse_quic_client_hello([Q.build_quic_initial(hello)])
@@ -111,6 +137,27 @@ def test_crypto_reassembled_across_packets():
     ]
     ch = parse_quic_client_hello(packets)
     assert ch.server_names == ["example.com"]
+
+
+def test_crypto_overlapping_fragments_reassemble():
+    hello = _quic_client_hello()
+    packets = [
+        Q.build_quic_initial(hello[:60], crypto_offset=0, packet_number=0),
+        Q.build_quic_initial(hello[40:100], crypto_offset=40, packet_number=1),
+        Q.build_quic_initial(hello[90:], crypto_offset=90, packet_number=2),
+    ]
+    ch = parse_quic_client_hello(packets)
+    assert ch.server_names == ["example.com"]
+
+
+def test_crypto_gap_raises_quic_parse_error():
+    hello = _quic_client_hello()
+    packets = [
+        Q.build_quic_initial(hello[:40], crypto_offset=0, packet_number=0),
+        Q.build_quic_initial(hello[60:], crypto_offset=60, packet_number=1),
+    ]
+    with pytest.raises(QuicParseError, match="incomplete CRYPTO stream"):
+        parse_quic_client_hello(packets)
 
 
 def test_later_initial_with_server_dcid_still_decrypts():

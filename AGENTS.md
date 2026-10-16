@@ -73,10 +73,11 @@ P4/P5 (profiles/catalog/modes/docs + deferred hooks) are implemented.
   both engines compile and link it.
 - **Engine**: `native/quic.go` (handshake, `net.FilePacketConn`, `dialQUIC`'s
   own deadline) and `native/httpx_h3.go` (`freetls_h3_request` +
-  `freetls_h3_datagram_{open,send,recv}`). The handshake establishes one QUIC
-  connection; HTTP/3 runs over it through **one `http3.ClientConn`** (a second
-  would compete for unidirectional streams), so a session has one
-  `quic.Transport`/`PacketConn`.
+  `freetls_h3_datagram_{open,send,recv,close}`). The handshake establishes one
+  QUIC connection; HTTP/3 runs over it through **one `http3.ClientConn`** (a
+  second would compete for unidirectional streams), so a session has one
+  `quic.Transport`/`PacketConn`. `QuicInitialSpec.version` selects QUIC v1
+  (default) or v2 (RFC 9369).
 - **Python**: `src/freetls/quic.py` (`QUICSession`: `request`, datagram helpers,
   `ja4q`/`ja4q_r`/`ja4sq`); `src/freetls/fingerprint/quic.py` (Initial parsing /
   key schedule). `Extension.quic_transport_parameters` + `QuicInitialSpec` +

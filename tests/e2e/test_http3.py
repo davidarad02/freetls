@@ -140,6 +140,108 @@ def test_quic_early_data_is_ignored(h3_server):
         session.close()
 
 
+def test_http3_invalid_header_fails_fast(h3_server):
+    """A bad header name/value errors immediately, not after the request deadline."""
+    session = _connect(h3_server)
+    try:
+        start = time.monotonic()
+        resp = session.request("/", headers=[("X-Bad", "a\r\nInjected: yes")])
+        elapsed = time.monotonic() - start
+        assert resp.get("error"), resp
+        assert elapsed < 5  # not the ~15s deadline hang
+    finally:
+        session.close()
+
+
+def test_http3_does_not_inject_headers(h3_server):
+    """An H3 request carries exactly the caller's headers (no UA/Accept-Encoding)."""
+    session = _connect(h3_server)
+    try:
+        resp = session.request("/headers")
+        echoed = {k.lower() for k, _ in resp["headers"]}
+        assert "x-echo-user-agent" not in echoed
+        assert "x-echo-accept-encoding" not in echoed
+    finally:
+        session.close()
+
+
+def test_http3_datagram_flow_close(h3_server):
+    """A datagram flow can be released; sending on it then fails, and close is idempotent."""
+    session = QUICSession(_quic_spec(datagrams=True))
+    session.connect("127.0.0.1", h3_server.port, timeout=15)
+    try:
+        flow = session.open_datagram_flow("/echo-datagram")
+        session.close_datagram_flow(flow)
+        with pytest.raises(Exception):
+            session.send_datagram(flow, b"x")
+        session.close_datagram_flow(flow)  # idempotent
+    finally:
+        session.close()
+
+
+def test_http3_ipv6_request(h3_server_v6):
+    """HTTP/3 over an IPv6 peer (the :authority must bracket the literal)."""
+    session = QUICSession(_quic_spec())
+    session.connect("::1", h3_server_v6.port, server_hostname="::1", timeout=15)
+    try:
+        assert session.selected_alpn_protocol() == "h3"
+        assert session._authority() == f"[::1]:{h3_server_v6.port}"
+        resp = session.request("/")
+        assert resp.get("error") in (None, ""), resp.get("error")
+        assert resp["status"] == 200
+        assert b"hello-h3" in resp["body"]
+    finally:
+        session.close()
+
+
+def test_http3_datagram_flows_recycle(h3_server):
+    """Closed flows free their streams, so more than the peer's limit can be opened."""
+    session = QUICSession(_quic_spec(datagrams=True))
+    session.connect("127.0.0.1", h3_server.port, timeout=15)
+    try:
+        for _ in range(120):  # > the advertised initial_max_streams_bidi (100)
+            flow = session.open_datagram_flow("/echo-datagram")
+            session.close_datagram_flow(flow)
+    finally:
+        session.close()
+
+
+def test_quic_v2_handshake_and_request(h3_server):
+    """QuicInitialSpec.version selects QUIC v2 (RFC 9369) end to end."""
+    from freetls.model import QUIC_V2
+
+    spec = _quic_spec()
+    spec.quic.version = QUIC_V2
+    session = QUICSession(spec)
+    session.connect("127.0.0.1", h3_server.port, timeout=15)
+    try:
+        assert session.selected_alpn_protocol() == "h3"
+        resp = session.request("/")
+        assert resp.get("error") in (None, ""), resp.get("error")
+        assert resp["status"] == 200
+        assert b"hello-h3" in resp["body"]
+    finally:
+        session.close()
+
+
+def test_httpx_http3_error_does_not_leak(h3_server, monkeypatch):
+    import httpx
+
+    from freetls.transport import httpx_transport
+    from freetls.transport.httpx_transport import FreeTLSTransport
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(httpx_transport._http3, "execute", boom)
+    before = engine.active_sessions()
+    transport = FreeTLSTransport(spec=_quic_spec(), http3=True)
+    with httpx.Client(transport=transport) as client:
+        with pytest.raises(RuntimeError):
+            client.get(f"https://127.0.0.1:{h3_server.port}/")
+    assert engine.active_sessions() == before
+
+
 def test_httpx_http3_transport(h3_server):
     import httpx
 

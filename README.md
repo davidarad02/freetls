@@ -368,7 +368,7 @@ spec = p.spec(server_name="example.com", verify=False)
 
 # or in one call:
 spec = profiles.spec("firefox_120", server_name="example.com")
-print(profiles.catalog_info())        # {"count": 220, "distinct_ja4": 110, ...}
+print(profiles.catalog_info())        # {"count": 248, "quic_count": 28, ...}
 ```
 
 Each profile's stored `ja4` is produced by the engine and verified by tests.
@@ -706,6 +706,8 @@ with freetls.QUICSession(spec) as s:
 - **aiohttp stays HTTP/1.1-only** (as it is for HTTP/2).
 - **TLS 1.3 CCM is not negotiable end-to-end** against Go/OpenSSL servers (it is
   covered at the AEAD level); see [Limitations](#limitations).
+- **Response header order is not preserved** (Go's `http.Header` is a map);
+  duplicate values are kept. The H2 path does preserve order.
 - **0-RTT, session resumption and ECH over QUIC are not implemented yet**
   (designed for; see `docs/route-c-plan.md`).
 
@@ -967,12 +969,25 @@ baseline_spec(server_name=None, ciphers=None, alpn=DEFAULT_ALPN,
               grease=False, grease_strategy="random", seed=None)
 specific(ciphers=None, extensions=None, server_name=None, ...)
 partial_random(server_name=None, ciphers=None, alpn=..., vers_min=..., vers_max=...,
-               n_random_ciphers=10, n_random_extensions=8, seed=None, verify=None)
+               n_random_ciphers=None, n_random_extensions=None, seed=None, verify=None)
 true_random(server_name=None, alpn=..., vers_min=..., vers_max=...,
-            n_ciphers=60, n_extensions=40, seed=None, verify=None)
+            n_ciphers=None, n_extensions=None, seed=None, verify=None)
 add_grease(spec, ciphers=True, groups=True, versions=True, extensions=True,
            strategy="random", seed=None)   # GREASE_VALUES: the 16 reserved codes
+
+# HTTP/3 (TLS 1.3 only, h3 ALPN, TLS 1.3 cipher pool):
+quic_baseline_spec(server_name=None, ciphers=None, alpn=DEFAULT_QUIC_ALPN,
+                   ..., transport_parameters=None, quic=None,
+                   datagrams=False, verify=None)
+quic_specific(...)
+quic_partial_random(...)
+quic_true_random(...)
+default_quic_transport_parameters() -> list[TransportParameter]
 ```
+
+`n_random_ciphers`/`n_random_extensions` (and `n_ciphers`/`n_extensions`) default to
+half the pool (which maximises the number of distinct JA4 values), so leave them
+unset unless you want a specific count.
 
 ### `profiles`
 
@@ -981,16 +996,18 @@ profiles.names() -> list[str]
 profiles.list_profiles() -> list[Profile]      # built-in + registered
 profiles.get(name_or_alias) -> Profile | None
 profiles.spec(name_or_alias, server_name=None, verify=None) -> FingerprintSpec
-profiles.catalog_info() -> {"count", "distinct_ja4", "registered", "total", ...}
-profiles.add_profile(name, *, alias=None, preset=None, chlo_json=None,
-                     no_sni=False, alpn=None, ja4=None, ja3=None) -> Profile
+profiles.catalog_info() -> {"count", "tcp_count", "quic_count", "distinct_ja4",
+                            "distinct_ja4q", "registered", "total", ...}
+profiles.add_profile(name, *, alias=None, preset=None, quic_id=None, chlo_json=None,
+                     no_sni=False, alpn=None, ja4=None, ja4q=None, ja3=None) -> Profile
 profiles.load_file(path) -> int                # register a JSON list of profiles
-profiles.find_ja4(query, *, limit=25) -> list[Profile]
+profiles.find_ja4(query, *, limit=25) -> list[Profile]   # spans JA4 and JA4q
 profiles.search(query, *, limit=25) -> list[Profile]
 profiles.export(profiles=None) -> list[dict]
 profiles.save_file(path, profiles=None) -> int
 profiles.h2_bundle(name, *, settings=None, window_update=None,
                    pseudo_header_order=None, ...) -> FingerprintSpec
+profiles.h3_bundle(name, *, quic=None, datagrams=False, ...) -> FingerprintSpec
 ```
 
 ### Engine helpers — `freetls.engine`

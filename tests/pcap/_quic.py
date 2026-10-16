@@ -13,6 +13,7 @@ import struct
 from hashlib import sha256
 
 # RFC 9001 §5.2 (v1) and RFC 9369 §3.3.2 (v2).
+QUIC_V2 = 0x6B3343CF
 SALTS = {
     0x00000001: bytes.fromhex("38762cf7f55934b34d179ae6a4c80cadccbb7f0a"),
     0x6B3343CF: bytes.fromhex("0dede3def700a6db819381be6e269dcbf9bd2ed9"),
@@ -118,11 +119,14 @@ def client_hellos(path: str, port: int) -> list[bytes]:
     for _src, dst, packet in _udp_payloads(path):
         if dst != port or len(packet) < 7:
             continue
-        if not packet[0] & 0x80 or packet[0] & 0x30:
-            continue  # not a long-header Initial
+        if not packet[0] & 0x80:
+            continue
         version = int.from_bytes(packet[1:5], "big")
         if version not in SALTS:
             continue
+        # v1 Initial type bits are 0b00; v2's are 0b01 (RFC 9369 §3.2).
+        if ((packet[0] >> 4) & 0x03) != (0b01 if version == QUIC_V2 else 0b00):
+            continue  # not a long-header Initial
 
         off = 5
         dcid_len = packet[off]

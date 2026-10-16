@@ -62,6 +62,10 @@ def test_quic_handshake_and_ja4q(h3_server):
         assert session.ja4q is not None and session.ja4q.startswith("q")
         assert session.ja4q_r is not None and session.ja4q_r.startswith("q")
         assert session.ja4q[1:] == session.fingerprints["ja4"][1:]
+        # JA4Sq comes from the ServerHello the engine captured (QUIC has no TLS
+        # record stream to tee).
+        assert session.server_hello()[:1] == b"\x02"
+        assert session.ja4sq is not None and session.ja4sq.startswith("q")
     finally:
         session.close()
 

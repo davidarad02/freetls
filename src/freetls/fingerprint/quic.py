@@ -176,9 +176,12 @@ def parse_initial(
     first = packet[0]
     if not first & 0x80:
         raise QuicParseError("not a long-header packet")
-    if first & 0x30:
-        raise QuicParseError("not an Initial packet")
     version = int.from_bytes(packet[1:5], "big")
+    # The long-header type codepoints are version-specific: v1 Initial is 0b00
+    # (RFC 9000 §17.2) while v2 Initial is 0b01 (RFC 9369 §3.2).
+    type_bits = (first >> 4) & 0x03
+    if type_bits != (0b01 if version == QUIC_VERSION_2 else 0b00):
+        raise QuicParseError("not an Initial packet")
 
     off = 5
     dcid_len = packet[off]
@@ -278,7 +281,7 @@ def iter_frames(frames: bytes) -> Iterable[tuple[int, bytes]]:
 
 
 def _crypto_stream(packets: Iterable[bytes]) -> bytes:
-    chunks: dict[int, bytes] = {}
+    fragments: dict[int, bytes] = {}
     largest_pn: int | None = None
     keys: tuple[bytes, bytes, bytes] | None = None
     for packet in packets:
@@ -291,15 +294,20 @@ def _crypto_stream(packets: Iterable[bytes]) -> bytes:
                 continue
             off, p = read_varint(frame, 1)
             clen, p = read_varint(frame, p)
-            chunks[off] = frame[p : p + clen]
-    if not chunks:
+            fragments[off] = frame[p : p + clen]
+    if not fragments:
         raise QuicParseError("no CRYPTO frames in Initial packets")
-    out = bytearray()
-    for offset in sorted(chunks):
-        if offset != len(out):
-            break
-        out += chunks[offset]
-    return bytes(out)
+    # Place every fragment (overlapping retransmissions included), then require
+    # the stream to be contiguous from offset 0.
+    end = max(off + len(data) for off, data in fragments.items())
+    stream = bytearray(end)
+    covered = bytearray(end)
+    for off, data in fragments.items():
+        stream[off : off + len(data)] = data
+        covered[off : off + len(data)] = b"\x01" * len(data)
+    if not covered or not all(covered):
+        raise QuicParseError("incomplete CRYPTO stream (gap or missing offset 0)")
+    return bytes(stream)
 
 
 def parse_quic_client_hello(packets: Iterable[bytes]) -> ClientHello:

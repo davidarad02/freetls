@@ -15,7 +15,7 @@ import os
 import socket
 
 from .engine import EngineSession, EngineState
-from .errors import FreeTLSError, HandshakeError, SpecError
+from .errors import EngineError, FreeTLSError, HandshakeError, SpecError
 from .fingerprint import ja4_from_bytes, ja4s_from_bytes
 from .model import FingerprintSpec
 
@@ -63,7 +63,7 @@ class QUICSession:
             raise
         try:
             return self.wrap_socket(sock, server_hostname=server_hostname or host)
-        except (HandshakeError, SpecError):
+        except (HandshakeError, SpecError, EngineError):
             self._cleanup()
             sock.close()
             raise
@@ -178,6 +178,24 @@ class QUICSession:
             raise FreeTLSError("session is not handshaked")
         return self._engine
 
+    def _authority(self, authority: str | None = None) -> str:
+        """The ``:authority`` for a request: host plus a non-default port.
+
+        Uses the SNI host when set, otherwise the peer's literal IP; IPv6
+        literals are bracketed (an unbracketed ``::1`` would produce an invalid
+        URL) and the port is appended only when it is not 443.
+        """
+        if authority:
+            return authority
+        host = self._sni or (self._remote[0] if self._remote else "")
+        if not host:
+            return ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        if self._remote is not None and self._remote[1] not in (0, 443):
+            return f"{host}:{self._remote[1]}"
+        return host
+
     def request(
         self,
         path: str = "/",
@@ -196,13 +214,10 @@ class QUICSession:
         import base64
 
         engine = self._require_engine()
-        auth = authority or self._sni
-        if not auth and self._remote is not None:
-            auth = f"{self._remote[0]}:{self._remote[1]}"
         req = {
             "method": method,
             "scheme": scheme,
-            "authority": auth or "",
+            "authority": self._authority(authority),
             "path": path,
             "headers": [list(h) for h in (headers or [])],
             "body_b64": base64.b64encode(body).decode() if body else "",
@@ -236,13 +251,10 @@ class QUICSession:
         engine = self._require_engine()
         if not self.spec.quic_datagrams:
             raise FreeTLSError("datagrams are not enabled for this session")
-        auth = authority or self._sni
-        if not auth and self._remote is not None:
-            auth = f"{self._remote[0]}:{self._remote[1]}"
         req = {
             "method": method,
             "scheme": scheme,
-            "authority": auth or "",
+            "authority": self._authority(authority),
             "path": path,
             "headers": [list(h) for h in (headers or [])],
             "timeout_ms": self.spec.timeout_ms,
@@ -269,6 +281,13 @@ class QUICSession:
         if resp.get("error"):
             raise FreeTLSError(f"recv datagram failed: {resp['error']}")
         return base64.b64decode(resp["data_b64"]) if resp.get("data_b64") else b""
+
+    def close_datagram_flow(self, flow: int) -> None:
+        """Release a datagram flow, freeing its request stream on the peer."""
+        engine = self._require_engine()
+        resp = engine.h3_datagram_close(flow)
+        if resp.get("error"):
+            raise FreeTLSError(f"close datagram flow failed: {resp['error']}")
 
     # -- ssl.SSLSocket-like accessors ---------------------------------------
     @property

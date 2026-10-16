@@ -45,9 +45,11 @@ def build_quic_initial(
     if keys is None:
         keys = initial_keys(version, dcid)
     key, iv, hp = keys
+    # v1 Initial type bits are 0b00 (0xC0), v2's are 0b01 (0xD0).
+    first_byte = (0xD0 if version == QUIC_V2 else 0xC0) | (pn_len - 1)
     frame = crypto_frame(crypto_payload, crypto_offset)
     prefix = (
-        bytes([0xC0 | (pn_len - 1)])
+        bytes([first_byte])
         + version.to_bytes(4, "big")
         + bytes([len(dcid)])
         + dcid

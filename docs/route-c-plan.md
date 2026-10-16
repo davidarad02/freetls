@@ -196,8 +196,9 @@ avoids a second stream-accept loop (which a `Transport` would start).
 
 ### Transports
 
-- `transport/_http3.py` mirrors `_http2.py`; `_http2.negotiated_protocol`
-  centralises the ALPN decision.
+- `transport/_http3.py` mirrors `_http2.py`. HTTP/3 is dispatched by the
+  explicit `http3=True` opt-in (not by ALPN), because Alt-Svc discovery is out
+  of scope; `_http2.negotiated_protocol` still centralises the H2-vs-H1 choice.
 - `httpx_transport._open(..., http3=False)` branches to a `QUICSession` before
   the TCP connect; `FreeTLSTransport(..., http3=True)`.
 - `urllib3_conn.Ja4HTTPSConnection` gains an H3 path (`_http3`, UDP, skip TCP,
@@ -244,12 +245,15 @@ a `/echo-datagram` handler.
 
 ## 8. Testing and verification
 
-- Unit/conformance: `tests/unit/test_quic.py` (RFC 9001 A.1 KAT),
-  `tests/unit/test_quic_model.py`, `tests/conformance/test_ja4q_vectors.py`.
+- Unit/conformance: `tests/unit/test_quic.py` (RFC 9001 A.1 and RFC 9369 A.1
+  known-answer vectors, v1 and v2 Initial round trips), `tests/unit/test_quic_model.py`,
+  `tests/unit/test_quic_session.py`, `tests/conformance/test_ja4q_vectors.py`.
 - Wire independence (JA4q only): `tests/pcap/_quic.py` (an independent RFC 9001
-  implementation, no freetls imports) + `tests/pcap/test_quic_initial.py`.
+  implementation, no freetls imports) + `tests/pcap/test_quic_initial.py`
+  (including the SNI-less case, where the reported JA4q must equal the wire).
   ⚠️ JA4Sq is **not** pcap-verifiable (the ServerHello rides under handshake
-  keys); it is verified from the engine's captured ServerHello.
+  keys); it is verified from the engine's captured ServerHello
+  (`test_quic_handshake.py` asserts `server_hello()` and `ja4sq`).
 - End-to-end: `tests/servers/go_http3/` (upstream quic-go), driven by
   `tests/e2e/test_quic_handshake.py`, `test_http3.py`, `test_quic_suites.py`.
 - Suite matrix: every QUIC-capable TLS 1.3 suite with app data. CCM is **not**
