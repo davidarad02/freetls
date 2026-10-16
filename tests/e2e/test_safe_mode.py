@@ -20,7 +20,7 @@ def _baseline(**kw) -> FingerprintSpec:
 def test_default_mode_is_unsafe():
     assert freetls.get_safe_mode() is False
     spec = _baseline()
-    spec.ciphers = [0x009E]  # DHE_RSA_AES128_GCM_SHA256, not backed
+    spec.ciphers = [0xC001]  # static-ECDH suite; never backed by the engine
     safety.validate(spec)  # no raise while safe mode is off
 
 
@@ -42,7 +42,7 @@ def test_unsupported_extensions_rejected(ext_id):
 def test_unsupported_cipher_rejected():
     spec = _baseline()
     spec.safe = True
-    spec.ciphers = [0x1301, 0x009E]
+    spec.ciphers = [0x1301, 0xC001]
     with pytest.raises(freetls.SpecError):
         safety.validate(spec)
 
@@ -71,13 +71,13 @@ def test_spec_override_beats_global():
     try:
         spec = _baseline()
         spec.safe = False
-        spec.ciphers = [0x009E]
+        spec.ciphers = [0xC001]
         safety.validate(spec)  # spec opts out of the global default
     finally:
         freetls.set_safe_mode(False)
     spec = _baseline()
     spec.safe = True
-    spec.ciphers = [0x009E]
+    spec.ciphers = [0xC001]
     with pytest.raises(freetls.SpecError):
         safety.validate(spec)
 

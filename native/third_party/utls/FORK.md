@@ -23,6 +23,11 @@ never edited. This keeps the diff rebasable (see `tools/rebase_utls.sh`).
 | `evp_cgo.go` | cgo `libcrypto` bridge (contexts, error handling) *(M2)* |
 | `freetls_supported.go` | `FreetlsSupportedCipherSuiteIDs()` for safe-mode validation *(M4)* |
 | `evp_freetls_test.go` | Go tests for the EVP AEAD/block bridge *(M2/M3)* |
+| `ffdhe_key_agreement.go` | `dhKeyAgreement`: FFDHE (DHE) client key exchange *(P1)* |
+| `ffdhe_dsa.go` | DSA (DSS) signature verification for DHE-DSS *(P1)* |
+| `ffdhe_ciphers.go` | DHE-RSA/DHE-DSS suite registration (Go-native ciphers) *(P1)* |
+| `ffdhe_ciphers_evp.go` | DHE suites backed by the EVP bridge (ARIA-GCM/AES-CCM/Camellia-CBC) *(P1)* |
+| `ffdhe_freetls_test.go` | Go tests for the FFDHE key agreement *(P1)* |
 
 `FORK.md` is also ours.
 
