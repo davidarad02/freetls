@@ -24,6 +24,9 @@ Examples
 
   # machine-readable
   tools/ja4_universe.py --engine wide --mode safe_random --safe --json
+
+  # Go-only alternate engine (fewer backed ciphers)
+  tools/ja4_universe.py --engine go --mode safe_random --safe --list-pools
 """
 
 from __future__ import annotations
@@ -52,9 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--engine",
-        choices=["auto", "default", "wide"],
+        choices=["auto", "default", "wide", "go"],
         default="auto",
-        help="engine to load (default: whatever FREETLS_LIB / the loader picks)",
+        help="engine to load: auto (whatever FREETLS_LIB / the loader picks), "
+        "wide/default (native/libfreetls.so, the wide engine), "
+        "go (native/libfreetls_go.so, Go-only); --lib overrides",
     )
     p.add_argument("--lib", help="explicit engine .so path (overrides --engine)")
     p.add_argument(
@@ -100,8 +105,10 @@ def build_parser() -> argparse.ArgumentParser:
 def select_engine(args: argparse.Namespace) -> None:
     if args.lib:
         os.environ["FREETLS_LIB"] = args.lib
-    elif args.engine in ("default", "wide"):
-        name = "libfreetls_libcrypto.so" if args.engine == "wide" else "libfreetls.so"
+    elif args.engine in ("default", "wide", "go"):
+        # The wide engine is native/libfreetls.so (the default); the Go-only
+        # alternate is native/libfreetls_go.so.
+        name = "libfreetls_go.so" if args.engine == "go" else "libfreetls.so"
         path = NATIVE / name
         if not path.exists():
             sys.exit(
@@ -381,7 +388,8 @@ def main() -> int:
             "- JA4_b space : distinct cipher sets this mode can emit (capped at 2^48).\n"
             "- JA4_c space : distinct extension sets it can emit (capped at 2^48).\n"
             "  In safe mode this is 2^(free whitelisted extensions); the free set is\n"
-            "  small, so it is 32 - it does not depend on the cipher pool or engine.\n"
+            f"  small, so it is {2 ** modes._free_safe_ext_count()} - it does not depend on "
+            "the cipher pool or engine.\n"
             "- total S     : b_space x c_space = the number of distinct JA4s available.\n"
             "  Bigger S means fewer collisions.\n"
             "- n50         : the fleet size at which a collision is as likely as not\n"
