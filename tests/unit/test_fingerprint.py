@@ -110,3 +110,12 @@ def test_parse_errors():
         parse_client_hello(b"")
     with pytest.raises(ParseError):
         parse_server_hello(b"\x01\x00\x00\x00")  # client hello, not server
+
+
+def test_parse_client_hello_truncated_raises_parse_error():
+    """A truncated ClientHello raises ParseError, not IndexError."""
+    from freetls.fingerprint.parse import ParseError
+
+    raw = bytes([0x01, 0x00, 0x00, 0x22]) + bytes(0x22)  # 34-byte body, no room for fields
+    with pytest.raises(ParseError):
+        parse_client_hello(raw)

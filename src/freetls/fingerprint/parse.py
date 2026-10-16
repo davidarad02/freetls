@@ -168,15 +168,25 @@ def parse_client_hello(raw: bytes) -> ClientHello:
         raise ParseError("client hello too short")
     ch.legacy_version = _u16(body, 0)
     off = 2 + 32  # legacy_version + random
+    if off >= len(body):
+        raise ParseError("truncated client hello (session id)")
     sid_len = body[off]
     off += 1 + sid_len
+    if off + 2 > len(body):
+        raise ParseError("truncated client hello (cipher suites)")
     cs_len = _u16(body, off)
     off += 2
+    if off + cs_len > len(body):
+        raise ParseError("truncated client hello (cipher suites)")
     cs = body[off : off + cs_len]
     off += cs_len
     ch.ciphers = [_u16(cs, i) for i in range(0, len(cs) - 1, 2)]
+    if off >= len(body):
+        raise ParseError("truncated client hello (compression)")
     comp_len = body[off]
     off += 1 + comp_len
+    if off > len(body):
+        raise ParseError("truncated client hello (compression)")
     if off + 2 <= len(body):
         ext_len = _u16(body, off)
         off += 2

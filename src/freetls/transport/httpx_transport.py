@@ -59,8 +59,9 @@ def _open(
     if url.scheme != "https":
         raise httpx.UnsupportedProtocol(f"freetls only supports https, got {url.scheme}")
     path = url.raw_path.decode("latin-1") or "/"
-    headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in request.headers.raw}
-    headers.setdefault("Host", url.netloc.decode("latin-1"))
+    header_pairs = [(k.decode("latin-1"), v.decode("latin-1")) for k, v in request.headers.raw]
+    if not any(k.lower() == "host" for k, _ in header_pairs):
+        header_pairs.append(("Host", url.netloc.decode("latin-1")))
     body = request.read()
 
     session: TLSSession | QUICSession
@@ -74,7 +75,7 @@ def _open(
     try:
         if http3:
             session.connect(host, port, server_hostname=spec.server_name or host)
-            resp = _http3.execute(session, request.method, path, headers, body)
+            resp = _http3.execute(session, request.method, path, header_pairs, body)
             reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
             return (
                 session,
@@ -94,7 +95,7 @@ def _open(
             session.connect(host, port, server_hostname=spec.server_name or host)
 
         if _http2.negotiated_h2(session):
-            resp = _http2.execute(session, request.method, path, headers, body)
+            resp = _http2.execute(session, request.method, path, header_pairs, body)
             reader = _Reader(lambda n: b"", session.close, resp.get("body", b""))
             return (
                 session,
@@ -107,7 +108,7 @@ def _open(
 
         conn = http.client.HTTPConnection(host, port)
         conn.sock = session  # http.client will skip connect() when sock is set
-        conn.request(request.method, path, body=body, headers=headers)
+        conn.request(request.method, path, body=body, headers=dict(header_pairs))
         resp = conn.getresponse()
 
         def close() -> None:

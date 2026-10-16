@@ -78,11 +78,168 @@ func newH2Decoder(maxTableSize uint32, emit func(hpack.HeaderField)) *hpack.Deco
 	return d
 }
 
-func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
-	resp := &h2Response{Headers: [][2]string{}}
-	var bodyBuf []byte
+const h2DefaultWindow = 65535
 
-	// Resolve effective settings / window / pseudo order.
+// h2Client is the persistent state of one HTTP/2 connection: the framer, the
+// shared HPACK contexts (so a connection can serve many requests), the
+// stream-ID counter and the send flow-control windows.
+type h2Client struct {
+	conn          net.Conn
+	fr            *http2.Framer
+	dec           *hpack.Decoder
+	enc           *hpack.Encoder
+	encBuf        bytes.Buffer
+	nextStream    uint32
+	maxFrameSize  uint32
+	connWindow    int64
+	streamWindow  map[uint32]int64
+	peerInitWin   int64
+	peerSettings  bool
+	sentSettings  []h2Setting
+	sentWindow    uint32
+
+	// per-request state
+	resp      *h2Response
+	bodyBuf   []byte
+	streamDone bool
+}
+
+func newH2Client(conn net.Conn) *h2Client {
+	return &h2Client{
+		conn:         conn,
+		maxFrameSize: 16384, // RFC 7540 §6.5.2: peers may not advertise less.
+		connWindow:   h2DefaultWindow,
+		streamWindow: map[uint32]int64{},
+		peerInitWin:  h2DefaultWindow,
+		nextStream:   1,
+	}
+}
+
+// start sends the connection preface, SETTINGS and the connection
+// WINDOW_UPDATE. It runs once per connection.
+func (c *h2Client) start(settings []h2Setting, windowUpdate uint32) error {
+	c.fr = http2.NewFramer(c.conn, c.conn)
+	if _, err := c.conn.Write([]byte(http2.ClientPreface)); err != nil {
+		return err
+	}
+	sets := make([]http2.Setting, 0, len(settings))
+	headerTableSize := uint32(4096)
+	for _, s := range settings {
+		sets = append(sets, http2.Setting{ID: http2.SettingID(s.ID), Val: s.Value})
+		if s.ID == uint16(http2.SettingHeaderTableSize) {
+			headerTableSize = s.Value
+		}
+	}
+	if err := c.fr.WriteSettings(sets...); err != nil {
+		return err
+	}
+	if windowUpdate > 0 {
+		if err := c.fr.WriteWindowUpdate(0, windowUpdate); err != nil {
+			return err
+		}
+	}
+	c.enc = hpack.NewEncoder(&c.encBuf)
+	c.dec = newH2Decoder(headerTableSize, func(f hpack.HeaderField) {
+		if c.resp == nil {
+			return
+		}
+		if f.Name == ":status" {
+			fmt.Sscanf(f.Value, "%d", &c.resp.Status)
+		} else {
+			c.resp.Headers = append(c.resp.Headers, [2]string{f.Name, f.Value})
+		}
+	})
+	c.sentSettings = settings
+	c.sentWindow = windowUpdate
+	return nil
+}
+
+// handle processes one inbound frame, updating flow-control windows and the
+// response being read. It returns an error only when the peer aborts the
+// request (RST_STREAM / GOAWAY) before a response status was seen.
+func (c *h2Client) handle(f http2.Frame) error {
+	switch f := f.(type) {
+	case *http2.SettingsFrame:
+		if f.IsAck() {
+			return nil
+		}
+		_ = f.ForeachSetting(func(s http2.Setting) error {
+			switch s.ID {
+			case http2.SettingMaxFrameSize:
+				c.maxFrameSize = s.Val
+			case http2.SettingInitialWindowSize:
+				delta := int64(s.Val) - c.peerInitWin
+				c.peerInitWin = int64(s.Val)
+				for id := range c.streamWindow {
+					c.streamWindow[id] += delta
+				}
+			}
+			return nil
+		})
+		c.peerSettings = true
+		return c.fr.WriteSettingsAck()
+	case *http2.PingFrame:
+		if !f.IsAck() {
+			return c.fr.WritePing(true, f.Data)
+		}
+	case *http2.WindowUpdateFrame:
+		if f.StreamID == 0 {
+			c.connWindow += int64(f.Increment)
+		} else {
+			c.streamWindow[f.StreamID] += int64(f.Increment)
+		}
+	case *http2.HeadersFrame:
+		if c.resp == nil {
+			return nil
+		}
+		if _, err := c.dec.Write(f.HeaderBlockFragment()); err != nil {
+			return err
+		}
+		if f.StreamEnded() {
+			c.streamDone = true
+		}
+	case *http2.ContinuationFrame:
+		if _, err := c.dec.Write(f.HeaderBlockFragment()); err != nil {
+			return err
+		}
+	case *http2.DataFrame:
+		if c.resp == nil {
+			return nil
+		}
+		if n := len(f.Data()); n > 0 {
+			c.bodyBuf = append(c.bodyBuf, f.Data()...)
+			_ = c.fr.WriteWindowUpdate(0, uint32(n))
+			_ = c.fr.WriteWindowUpdate(f.StreamID, uint32(n))
+		}
+		if f.StreamEnded() {
+			c.streamDone = true
+		}
+	case *http2.RSTStreamFrame:
+		if c.resp != nil && c.resp.Status == 0 {
+			return fmt.Errorf("HTTP/2 stream reset by peer (code 0x%x)", f.ErrCode)
+		}
+		c.streamDone = true
+	case *http2.GoAwayFrame:
+		if c.resp != nil && c.resp.Status == 0 {
+			return fmt.Errorf("HTTP/2 connection closed by peer (GOAWAY code 0x%x)", f.ErrCode)
+		}
+		c.streamDone = true
+	}
+	return nil
+}
+
+// readFrame reads and handles one frame.
+func (c *h2Client) readFrame() error {
+	f, err := c.fr.ReadFrame()
+	if err != nil {
+		return err
+	}
+	return c.handle(f)
+}
+
+func doH2(s *session, req h2RequestSpec) (*h2Response, error) {
+	resp := &h2Response{Headers: [][2]string{}}
+
 	settings := req.Settings
 	if len(settings) == 0 {
 		settings = defaultH2Settings()
@@ -96,49 +253,41 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 			return nil, fmt.Errorf("unknown pseudo-header %q", p)
 		}
 	}
-	resp.SentSettings = settings
-	resp.SentWindow = req.WindowUpdate
-	resp.SentPseudoOrder = order
 
-	// The HPACK decoder must allow a dynamic table at least as large as the
-	// HEADER_TABLE_SIZE we advertise, or a compliant peer's size update (which
-	// may grow up to the advertised value) is rejected as "too large".
-	headerTableSize := uint32(4096)
-	for _, s := range settings {
-		if s.ID == uint16(http2.SettingHeaderTableSize) {
-			headerTableSize = s.Value
-		}
+	conn := s.uconn
+	if conn == nil {
+		return nil, fmt.Errorf("no active session")
 	}
-
 	if req.TimeoutMS > 0 {
 		_ = conn.SetDeadline(time.Now().Add(time.Duration(req.TimeoutMS) * time.Millisecond))
 		defer conn.SetDeadline(time.Time{})
 	}
 
-	fr := http2.NewFramer(conn, conn)
-
-	// 1. Client preface.
-	if _, err := conn.Write([]byte(http2.ClientPreface)); err != nil {
-		return nil, err
-	}
-	// 2. SETTINGS (in the order requested).
-	sets := make([]http2.Setting, 0, len(settings))
-	for _, s := range settings {
-		sets = append(sets, http2.Setting{ID: http2.SettingID(s.ID), Val: s.Value})
-	}
-	if err := fr.WriteSettings(sets...); err != nil {
-		return nil, err
-	}
-	// 3. Connection WINDOW_UPDATE.
-	if req.WindowUpdate > 0 {
-		if err := fr.WriteWindowUpdate(0, req.WindowUpdate); err != nil {
+	if s.h2 == nil {
+		c := newH2Client(conn)
+		if err := c.start(settings, req.WindowUpdate); err != nil {
 			return nil, err
 		}
+		s.h2 = c
 	}
+	c := s.h2
+	c.sentSettings = settings
+	if req.WindowUpdate > 0 {
+		c.sentWindow = req.WindowUpdate
+	}
+	resp.SentSettings = c.sentSettings
+	resp.SentWindow = c.sentWindow
+	resp.SentPseudoOrder = order
 
-	// 4. HEADERS (HPACK), pseudo-headers in the requested order.
-	var hbuf bytes.Buffer
-	enc := hpack.NewEncoder(&hbuf)
+	streamID := c.nextStream
+	c.nextStream += 2
+	c.streamWindow[streamID] = c.peerInitWin
+	c.resp = resp
+	c.bodyBuf = nil
+	c.streamDone = false
+
+	// HEADERS (HPACK), pseudo-headers in the requested order.
+	c.encBuf.Reset()
 	pseudo := map[string]string{
 		"method":    req.Method,
 		"scheme":    req.Scheme,
@@ -146,14 +295,12 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 		"path":      req.Path,
 	}
 	for _, p := range order {
-		if err := enc.WriteField(hpack.HeaderField{Name: validPseudo[p], Value: pseudo[p]}); err != nil {
+		if err := c.enc.WriteField(hpack.HeaderField{Name: validPseudo[p], Value: pseudo[p]}); err != nil {
 			return nil, err
 		}
 	}
 	for _, h := range req.Headers {
-		if err := enc.WriteField(hpack.HeaderField{
-			Name: strings.ToLower(h[0]), Value: h[1],
-		}); err != nil {
+		if err := c.enc.WriteField(hpack.HeaderField{Name: strings.ToLower(h[0]), Value: h[1]}); err != nil {
 			return nil, err
 		}
 	}
@@ -161,71 +308,57 @@ func doH2(conn net.Conn, req h2RequestSpec) (*h2Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := fr.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      1,
-		BlockFragment: hbuf.Bytes(),
+	if err := c.fr.WriteHeaders(http2.HeadersFrameParam{
+		StreamID:      streamID,
+		BlockFragment: c.encBuf.Bytes(),
 		EndStream:     len(body) == 0,
 		EndHeaders:    true,
 	}); err != nil {
 		return nil, err
 	}
-	if len(body) > 0 {
-		if err := fr.WriteData(1, true, body); err != nil {
-			return nil, err
-		}
-	}
 
-	// 5. Read frames until the stream ends.
-	dec := newH2Decoder(headerTableSize, func(f hpack.HeaderField) {
-		if f.Name == ":status" {
-			fmt.Sscanf(f.Value, "%d", &resp.Status)
-		} else {
-			resp.Headers = append(resp.Headers, [2]string{f.Name, f.Value})
-		}
-	})
-	done := false
-	for !done {
-		f, err := fr.ReadFrame()
-		if err != nil {
-			if resp.Status != 0 {
+	// Send the body within the peer's flow-control window, splitting at its
+	// maximum frame size and reading WINDOW_UPDATE / SETTINGS as needed.
+	remaining := body
+	for len(remaining) > 0 && !c.streamDone {
+		for c.connWindow <= 0 || c.streamWindow[streamID] <= 0 {
+			if err := c.readFrame(); err != nil {
+				return nil, err
+			}
+			if c.streamDone {
 				break
 			}
+		}
+		if c.streamDone {
+			break
+		}
+		n := int64(len(remaining))
+		if n > int64(c.maxFrameSize) {
+			n = int64(c.maxFrameSize)
+		}
+		if n > c.connWindow {
+			n = c.connWindow
+		}
+		if w := c.streamWindow[streamID]; n > w {
+			n = w
+		}
+		end := int64(len(remaining)) == n
+		if err := c.fr.WriteData(streamID, end, remaining[:n]); err != nil {
 			return nil, err
 		}
-		switch f := f.(type) {
-		case *http2.SettingsFrame:
-			if !f.IsAck() {
-				_ = fr.WriteSettingsAck()
-			}
-		case *http2.PingFrame:
-			if !f.IsAck() {
-				_ = fr.WritePing(true, f.Data)
-			}
-		case *http2.HeadersFrame:
-			if _, err := dec.Write(f.HeaderBlockFragment()); err != nil {
-				return nil, err
-			}
-			if f.StreamEnded() {
-				done = true
-			}
-		case *http2.ContinuationFrame:
-			if _, err := dec.Write(f.HeaderBlockFragment()); err != nil {
-				return nil, err
-			}
-		case *http2.DataFrame:
-			if n := len(f.Data()); n > 0 {
-				bodyBuf = append(bodyBuf, f.Data()...)
-				_ = fr.WriteWindowUpdate(0, uint32(n))
-				_ = fr.WriteWindowUpdate(1, uint32(n))
-			}
-			if f.StreamEnded() {
-				done = true
-			}
-		case *http2.GoAwayFrame:
-			done = true
+		c.connWindow -= n
+		c.streamWindow[streamID] -= n
+		remaining = remaining[n:]
+	}
+
+	// Read frames until the stream ends.
+	for !c.streamDone {
+		if err := c.readFrame(); err != nil {
+			return nil, err
 		}
 	}
-	resp.BodyB64 = base64.StdEncoding.EncodeToString(bodyBuf)
+	resp.BodyB64 = base64.StdEncoding.EncodeToString(c.bodyBuf)
+	c.resp = nil
 	return resp, nil
 }
 
@@ -246,7 +379,7 @@ func freetls_h2_request(h C.longlong, reqJSON *C.char) (out *C.char) {
 		b, _ := json.Marshal(h2Response{Error: err.Error()})
 		return C.CString(string(b))
 	}
-	resp, err := doH2(s.uconn, req)
+	resp, err := doH2(s, req)
 	if err != nil {
 		b, _ := json.Marshal(h2Response{Error: err.Error()})
 		return C.CString(string(b))

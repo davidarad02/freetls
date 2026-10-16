@@ -176,6 +176,24 @@ def test_certificate_pinning(pki, tls_server):
         _connect(tls_server.port, bad)
 
 
+def test_system_roots_false_without_custom_ca_rejects(pki, tls_server):
+    """system_roots=False must not silently fall back to the OS trust store."""
+    spec = modes.baseline_spec(server_name="localhost")
+    spec.verify = True
+    spec.system_roots = False
+    with pytest.raises(HandshakeError):
+        _connect(tls_server.port, spec)
+
+
+def test_pin_enforced_even_with_verify_false(pki, tls_server):
+    """Pinning is explicit, so it is enforced even when chain verification is off."""
+    spec = modes.baseline_spec(server_name="localhost")
+    spec.verify = False
+    spec.pinned_sha256 = [base64.b64encode(b"\x00" * 32).decode()]
+    with pytest.raises(HandshakeError):
+        _connect(tls_server.port, spec)
+
+
 def test_verify_with_cadata_and_ca_dir(pki, tls_server, tmp_path):
     ca_pem = Path(pki.ca).read_text()
     spec = modes.baseline_spec(server_name="localhost")

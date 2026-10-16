@@ -35,6 +35,25 @@ def negotiated_protocol(session) -> str | None:
     return alpn if alpn in ("h3", "h2") else None
 
 
+def _header_pairs(headers) -> list:
+    """Normalise headers to ``[(name, value), ...]``.
+
+    Accepts a mapping (``dict``, ``CaseInsensitiveDict``, ``HTTPHeaderDict``,
+    ``httpx.Headers``, ...) or an iterable of 2-tuples, preserving duplicates
+    and order for the iterable case.
+    """
+    if headers is None:
+        return []
+    items = getattr(headers, "items", None)
+    if items is not None:
+        return [(str(k), str(v)) for k, v in items()]
+    return [
+        (str(item[0]), str(item[1]))
+        for item in headers
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    ]
+
+
 def execute(
     session,
     method: str,
@@ -43,15 +62,8 @@ def execute(
     body: bytes = b"",
 ):
     """Run an HTTP/2 request; return the engine response dict."""
-    if isinstance(headers, dict):
-        pairs = list(headers.items())
-    else:
-        pairs = [
-            (item[0], item[1])
-            for item in (headers or [])
-            if isinstance(item, (list, tuple)) and len(item) == 2
-        ]
-    req_headers = [[str(k), str(v)] for k, v in pairs if str(k).lower() not in _HOP_BY_HOP]
+    pairs = _header_pairs(headers)
+    req_headers = [[k, v] for k, v in pairs if k.lower() not in _HOP_BY_HOP]
     if isinstance(body, str):
         body = body.encode()
     resp = session.h2_request(path, method=method, headers=req_headers, body=body or b"")

@@ -7,6 +7,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 )
@@ -26,6 +27,10 @@ func main() {
 			w.Header().Set("X-Echo-"+k, v[0])
 		}
 		fmt.Fprint(w, "ok")
+	})
+	mux.HandleFunc("/echo-body", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		fmt.Fprintf(w, "len=%d", len(b))
 	})
 
 	srv := &http.Server{

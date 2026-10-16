@@ -62,24 +62,29 @@ class QUICSession:
             # The connect timeout also covers the QUIC handshake.
             self.spec.timeout_ms = max(1, int(timeout * 1000))
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)
-        af, socktype, proto, _, addr = infos[0]
-        # The socket stays *unconnected*: quic-go sends with WriteTo, which Go
-        # refuses on a pre-connected socket. Python resolves the host and passes
-        # the literal IP to the engine instead.
-        sock = socket.socket(af, socktype, proto)
-        self._remote = (str(addr[0]), int(addr[1]))
-        try:
-            if timeout is not None:
-                sock.settimeout(timeout)
-        except OSError:
-            sock.close()
-            raise
-        try:
-            return self.wrap_socket(sock, server_hostname=server_hostname or host)
-        except (HandshakeError, SpecError, EngineError):
-            self._cleanup()
-            sock.close()
-            raise
+        # Try every resolved address in order (a dual-stack host may list an
+        # unreachable family first). The socket stays *unconnected*: quic-go
+        # sends with WriteTo, which Go refuses on a pre-connected socket.
+        last_exc: Exception | None = None
+        for af, socktype, proto, _, addr in infos:
+            sock = socket.socket(af, socktype, proto)
+            self._remote = (str(addr[0]), int(addr[1]))
+            try:
+                if timeout is not None:
+                    sock.settimeout(timeout)
+                return self.wrap_socket(sock, server_hostname=server_hostname or host)
+            except OSError:
+                sock.close()
+                raise
+            except (HandshakeError, SpecError, EngineError) as exc:
+                self._cleanup()
+                sock.close()
+                self._sock = None
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            raise last_exc
+        raise FreeTLSError(f"could not resolve {host!r}")
 
     def wrap_socket(
         self,

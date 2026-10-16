@@ -155,32 +155,36 @@ func (t *teeConn) captured() (out, in []byte) {
 	return append([]byte(nil), t.out...), append([]byte(nil), t.in...)
 }
 
-// firstHandshake walks TLS records in stream and returns the first handshake
-// message of the requested type (including its 4-byte handshake header).
+// firstHandshake reassembles the TLS handshake stream from the handshake
+// records in stream and returns the first handshake message of the requested
+// type (including its 4-byte handshake header). Handshake messages may span
+// several TLS records (e.g. a padded ClientHello), so the record payloads are
+// concatenated before parsing.
 func firstHandshake(stream []byte, wantType byte) []byte {
+	var hs []byte
 	i := 0
 	for i+5 <= len(stream) {
 		ct := stream[i]
 		length := int(stream[i+3])<<8 | int(stream[i+4])
 		if i+5+length > len(stream) {
-			return nil
+			break
 		}
 		if ct == 0x16 { // handshake record
-			hs := stream[i+5 : i+5+length]
-			j := 0
-			for j+4 <= len(hs) {
-				mt := hs[j]
-				ml := int(hs[j+1])<<16 | int(hs[j+2])<<8 | int(hs[j+3])
-				if j+4+ml > len(hs) {
-					break // fragmented into next record; not handled here
-				}
-				if mt == wantType {
-					return append([]byte(nil), hs[j:j+4+ml]...)
-				}
-				j += 4 + ml
-			}
+			hs = append(hs, stream[i+5:i+5+length]...)
 		}
 		i += 5 + length
+	}
+	j := 0
+	for j+4 <= len(hs) {
+		mt := hs[j]
+		ml := int(hs[j+1])<<16 | int(hs[j+2])<<8 | int(hs[j+3])
+		if j+4+ml > len(hs) {
+			break // still incomplete
+		}
+		if mt == wantType {
+			return append([]byte(nil), hs[j:j+4+ml]...)
+		}
+		j += 4 + ml
 	}
 	return nil
 }
@@ -195,6 +199,7 @@ type session struct {
 	tee      *teeConn
 	uconn    *utls.UConn
 	raw      net.Conn
+	h2       *h2Client
 	preset   string
 	chloJSON string
 	noSNI    bool
@@ -448,7 +453,9 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 		cfg.OmitEmptyPsk = true
 	}
 
-	// Assemble a CA pool from the requested sources.
+	// Assemble a CA pool from the requested sources. With system_roots=false and
+	// no custom CA the pool is an *empty* (non-nil) pool, so the host trust store
+	// is not used — a nil RootCAs would silently fall back to the system roots.
 	var pool *x509.CertPool
 	if systemRoots {
 		if sys, err := x509.SystemCertPool(); err == nil {
@@ -456,6 +463,8 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 		} else {
 			pool = x509.NewCertPool()
 		}
+	} else {
+		pool = x509.NewCertPool()
 	}
 	addPEM := func(pem []byte, src string) error {
 		if pool == nil {
@@ -501,6 +510,10 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 	switch {
 	case !s.Verify:
 		cfg.InsecureSkipVerify = true
+		// Pinning is explicit: enforce it even when chain verification is off.
+		if len(s.PinnedSHA256) > 0 {
+			cfg.VerifyPeerCertificate = makePinVerifier(s.PinnedSHA256)
+		}
 	case !checkHostname:
 		// Verify the chain but not the hostname; also enforce pins.
 		cfg.InsecureSkipVerify = true
@@ -1106,7 +1119,13 @@ func freetls_write(h C.longlong, buf unsafe.Pointer, length C.longlong) (rc C.lo
 	if s == nil || s.uconn == nil {
 		return -1
 	}
+	if s.timeout > 0 && s.raw != nil {
+		_ = s.raw.SetWriteDeadline(time.Now().Add(s.timeout))
+	}
 	n, err := s.uconn.Write(unsafe.Slice((*byte)(buf), int(length)))
+	if s.timeout > 0 && s.raw != nil {
+		_ = s.raw.SetWriteDeadline(time.Time{})
+	}
 	if n > 0 {
 		return C.longlong(n)
 	}

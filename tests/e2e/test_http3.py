@@ -271,6 +271,27 @@ def test_requests_http3_adapter(h3_server):
     assert adapter.last_ja4s is not None and adapter.last_ja4s.startswith("q")
 
 
+def test_requests_http3_forwards_headers(h3_server):
+    """The transport must forward request headers (regression: Mapping handling)."""
+    import requests
+
+    from freetls import JA4Adapter
+
+    adapter = JA4Adapter(spec=_quic_spec(), http3=True)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    try:
+        resp = session.get(
+            f"https://127.0.0.1:{h3_server.port}/headers",
+            headers={"X-Test": "abc", "X-Two": "def"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("x-echo-x-test") == "abc"
+        assert resp.headers.get("x-echo-x-two") == "def"
+    finally:
+        session.close()
+
+
 def test_quic_wrap_socket_with_host_port(h3_server):
     """wrap_socket works when the (unconnected) UDP peer is supplied."""
     import socket as _socket

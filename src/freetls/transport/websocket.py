@@ -26,21 +26,21 @@ class WebSocketError(Exception):
     """Raised on a failed handshake or a protocol violation."""
 
 
-def _read_http_response(session) -> tuple[int, dict]:
+def _read_http_response(session) -> tuple[int, dict, bytes]:
     data = b""
     while b"\r\n\r\n" not in data:
         chunk = session.recv(4096)
         if not chunk:
             break
         data += chunk
-    head, _, _rest = data.partition(b"\r\n\r\n")
+    head, _, rest = data.partition(b"\r\n\r\n")
     lines = head.decode("latin-1").split("\r\n")
     status = int(lines[0].split(" ")[1]) if len(lines[0].split(" ")) > 1 else 0
     headers = {}
     for line in lines[1:]:
         key, _, value = line.partition(":")
         headers[key.strip().lower()] = value.strip()
-    return status, headers
+    return status, headers, rest
 
 
 def connect(session, host: str, path: str = "/", *, headers=None, extra_headers=None, timeout=None):
@@ -59,21 +59,24 @@ def connect(session, host: str, path: str = "/", *, headers=None, extra_headers=
     for name, value in (extra_headers or {}).items():
         lines.append(f"{name}: {value}")
     session.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
-    status, resp_headers = _read_http_response(session)
+    status, resp_headers, rest = _read_http_response(session)
     if status != 101:
         raise WebSocketError(f"upgrade failed with status {status}")
     expect = base64.b64encode(hashlib.sha1((key + _GUID).encode()).digest()).decode()
     if resp_headers.get("sec-websocket-accept") != expect:
         raise WebSocketError("bad Sec-WebSocket-Accept")
-    return WebSocket(session)
+    return WebSocket(session, initial=rest)
 
 
 class WebSocket:
     """A client WebSocket wrapping a :class:`~freetls.session.TLSSession`."""
 
-    def __init__(self, session):
+    def __init__(self, session, initial: bytes = b""):
         self._session = session
         self._closed = False
+        # Bytes read past the upgrade response (a server may coalesce the 101
+        # and the first frames in one TLS record).
+        self._buf = bytearray(initial)
 
     def close(self, code: int = 1000, reason: str = "") -> None:
         if not self._closed:
@@ -138,13 +141,14 @@ class WebSocket:
         self._session.sendall(bytes(header) + payload)
 
     def _read_exact(self, n: int) -> bytes:
-        data = b""
-        while len(data) < n:
-            chunk = self._session.recv(n - len(data))
+        while len(self._buf) < n:
+            chunk = self._session.recv(max(4096, n - len(self._buf)))
             if not chunk:
                 raise WebSocketError("connection closed mid-frame")
-            data += chunk
-        return data
+            self._buf += chunk
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
 
     def _read_frame(self) -> tuple[bool, int, bytes]:
         b0, b1 = self._read_exact(2)
