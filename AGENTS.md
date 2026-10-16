@@ -54,6 +54,61 @@ runtime via `freetls.use_engine(freetls.Engine.GO)`.
   TLS 1.3 CCM is implemented but not negotiable against local OpenSSL/Go servers
   (AEAD-verified only). See `docs/route-b-plan.md` §0.
 
+## Route C — HTTP/3 + QUIC
+
+The approved plan lives in **`docs/route-c-plan.md`**; treat it as the source of
+truth (locked decisions D1–D14, the uQUIC fork, EVP/CCM parity, the spec model +
+ABI, ALPN/dispatch, catalog math, testing, out-of-scope and risks).
+
+Status: **complete.** P1 (passive JA4q/JA4Sq calculators), P2 (a spoofed QUIC
+Initial + ABI **3**), P3 (HTTP/3 requests + RFC 9297 datagrams + transports) and
+P4/P5 (profiles/catalog/modes/docs + deferred hooks) are implemented.
+
+- **uQUIC fork**: `native/third_party/uquic` (a hard fork of quic-go that swaps
+  `crypto/tls` → uTLS), wired with
+  `replace github.com/refraction-networking/uquic => ./third_party/uquic`.
+  Rebase with `tools/rebase_uquic.sh`; documented in
+  `native/third_party/uquic/FORK.md`. It builds on **our** uTLS fork, so every
+  freetls fork change applies. `native/quic_link.go` blank-imports the stack so
+  both engines compile and link it.
+- **Engine**: `native/quic.go` (handshake, `net.FilePacketConn`, `dialQUIC`'s
+  own deadline) and `native/httpx_h3.go` (`freetls_h3_request` +
+  `freetls_h3_datagram_{open,send,recv}`). The handshake establishes one QUIC
+  connection; HTTP/3 runs over it through **one `http3.ClientConn`** (a second
+  would compete for unidirectional streams), so a session has one
+  `quic.Transport`/`PacketConn`.
+- **Python**: `src/freetls/quic.py` (`QUICSession`: `request`, datagram helpers,
+  `ja4q`/`ja4q_r`/`ja4sq`); `src/freetls/fingerprint/quic.py` (Initial parsing /
+  key schedule). `Extension.quic_transport_parameters` + `QuicInitialSpec` +
+  `FingerprintSpec.quic`/`quic_id`/`quic_datagrams`/`quic_early_data`.
+- **Transports**: `transport/_http3.py` mirrors `_http2.py`;
+  `_http2.negotiated_protocol` drives dispatch. HTTP/3 is **opt-in**
+  (`FreeTLSTransport(..., http3=True)`, `JA4Adapter(..., http3=True)`) because
+  Alt-Svc/HTTPS-RR discovery is out of scope. aiohttp stays HTTP/1.1-only.
+- **EVP/CCM parity**: two build-tag-gated hunks in uQUIC
+  (`internal/handshake/cipher_suite.go`, `header_protector.go`, in
+  `native/third_party/uquic/patches/freetls.patch`) plus a tag-gated AEAD in each
+  fork. `make test-uquic` runs both builds. CCM is **not negotiable end-to-end**
+  against Go/OpenSSL servers; the QUIC suite matrix skips those rows.
+
+### QUIC findings worth carrying forward
+
+1. **`initial_source_connection_id` is mandatory.** Without it a conformant
+   server silently drops the Initial (no error). `ensureInitialSourceCID` injects
+   it unless explicitly suppressed; it does not change JA4q.
+2. **uQUIC's `Dial` can hang forever** with a custom `ClientHelloSpec` (its
+   handshake-idle-timeout path never fires). `dialQUIC` enforces the engine's own
+   deadline and closes the PacketConn to release the dial.
+3. **RFC 9001 §5.2 keys the whole client flight from the *first* Initial's
+   DCID.** Later client Initials carry a different DCID but the same keys;
+   deriving per packet is wrong (fixed in both `fingerprint/quic.py` and
+   `tests/pcap/_quic.py`).
+4. **Datagrams need the wire parameter, not just the config.** `quic.Config`
+   `EnableDatagrams` alone is not enough: uQUIC takes the transport parameters
+   from the `ClientHelloSpec`, so `ensureMaxDatagramFrameSize` injects
+   `max_datagram_frame_size` (0x20) when `quic_datagrams` is set, or the peer
+   closes with "missing QUIC Datagram support".
+
 ## Commands (use these; don't guess)
 
 All Python commands use the project venv (`.venv/`), not the system Python.
@@ -144,29 +199,40 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   so arbitrary/newer fingerprints need no Go change.
 - `native/httpx_h2.go` — Go-side HTTP/2 client (`x/net/http2` Framer + hpack)
   exposing configurable SETTINGS/WINDOW_UPDATE/pseudo-header order.
+- `native/quic.go` + `native/httpx_h3.go` — QUIC handshake (uQUIC `UTransport`
+  over a `net.FilePacketConn`) and the HTTP/3 client (`http3.ClientConn`; requests
+  and RFC 9297 datagrams). `native/quic_id_map.go` maps the uQUIC preset names
+  (hand-maintained — uQUIC ships no registry).
+- `native/third_party/uquic` — the vendored uQUIC fork (quic-go with uTLS);
+  `native/quic_link.go` blank-imports it so both engines link the QUIC stack.
 - `native/h2_test.go` / `native/presets_test.go` — assert the exact H2 frames on
   the wire and that every generated preset is buildable.
 - `src/freetls/engine/_cffi.py` — cffi binding + `.so` discovery (`FREETLS_LIB`,
   then `src/freetls/_lib`, then `native/`, then `build/`).
 - `src/freetls/model.py` — `FingerprintSpec` / `Extension` (the spec model).
 - `src/freetls/modes.py` — `baseline_spec` / `specific` / `partial_random` /
-  `true_random`; `SAFE_PADDING_EXT_IDS` keeps padding to assigned ext IDs a
-  server ignores.
+  `true_random` (and `quic_baseline_spec` / `quic_specific` /
+  `quic_partial_random` / `quic_true_random` for HTTP/3);
+  `SAFE_PADDING_EXT_IDS` keeps padding to assigned ext IDs a server ignores.
 - `src/freetls/session.py` — `TLSSession` (socket-like; `ja4`/`ja3`/`ja4s`,
-  `h2_request`). `src/freetls/context.py` — `TLSContext` (`ssl`-style
-  `wrap_socket`).
+  `h2_request`). `src/freetls/quic.py` — `QUICSession` (UDP; `ja4q`/`ja4q_r`/
+  `ja4sq`, `request`, datagram helpers). `src/freetls/context.py` — `TLSContext`
+  (`ssl`-style `wrap_socket`).
 - `src/freetls/fingerprint/` — `ja4.py` (also `ja4_from_spec`), `ja3.py`,
-  `ja4s.py`, `parse.py` (raw hello parser), `tables/`, and the report-only
-  calculators `ja4x.py`, `ja4t.py`, `ja4l.py`, `ja4h.py`.
+  `ja4s.py`, `quic.py` (QUIC Initial parsing + RFC 9001 key schedule),
+  `parse.py` (raw hello parser), `tables/`, and the report-only calculators
+  `ja4x.py`, `ja4t.py`, `ja4l.py`, `ja4h.py`.
 - `src/freetls/profiles/` — catalog loader + **runtime registration**
-  (`get`/`list_profiles`/`spec`/`add_profile`/`load_file`).
+  (`get`/`list_profiles`/`spec`/`add_profile`/`load_file`); `catalog.json` merges
+  TCP and QUIC profiles (generated by `tools/gen_catalog.py`).
 - `src/freetls/transport/` — `requests_adapter.py` (+ `urllib3_conn.py`),
   `httpx_transport.py`, `aiohttp_connector.py`. Bodies are **streamed** (httpx
   chunk-by-chunk over HTTP/1.1; aiohttp feeds the loop as data arrives);
   `transport/_content.py` decodes gzip/deflate/brotli/zstd (optional
   `freetls[content]`); `transport/proxy.py` (HTTP CONNECT + SOCKS4/5),
   `transport/retry.py` (`Retry` backoff) and `transport/websocket.py` (RFC 6455
-  client) round out the transport layer. HTTP/3/QUIC is deferred.
+  client) round out the transport layer. HTTP/3 is opt-in via
+  `transport/_http3.py` (see Route C).
 - `src/freetls/sse.py` — `iter_sse` / `SSEEvent` (WHATWG event-stream parser).
 - `src/freetls/fingerprint/chlo.py` — `chlo_json_from_raw` (captured
   ClientHello -> uTLS ClientHelloSpec JSON, the inverse of the engine's
@@ -175,7 +241,10 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   parity hook.
 - `tests/` — `unit/`, `conformance/` (FoxIO vectors), `e2e/`, `pcap/`;
   `tests/_build.py` (raw-hello builders + `CHLO_JSON`), `tests/servers.py`
-  (in-process HTTPS app server), `tests/servers/go_https/` (Go h2 test server).
+  (in-process HTTPS app server), `tests/servers/go_https/` (Go h2 test server),
+  `tests/servers/go_http3/` (Go HTTP/3 test server, built on **upstream**
+  quic-go so the client is validated against an independent stack),
+  `tests/pcap/_quic.py` (independent UDP pcap extractor).
 
 ## Wiring facts that span files
 
@@ -188,7 +257,10 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   `record_size_limit` / `pre_shared_key` extension kinds. Session resumption
   requires the `session_ticket` (TLS 1.2) or `pre_shared_key` (TLS 1.3, placed
   last) extension in the spec; `stateJSON` now carries `did_resume`,
-  `ocsp_response_b64`, `sct_b64`, `peer_alps_b64`.
+  `ocsp_response_b64`, `sct_b64`, `peer_alps_b64`. QUIC fields (`transport`,
+  `quic`, `quic_id`, `quic_datagrams`, `quic_early_data`) are mirrored in
+  `native/quic.go::quicSpecFor` / `httpx_h3.go`; the
+  `quic_transport_parameters` extension kind lives in `buildExtension`.
 - uTLS's JSON parser can **panic** on a malformed `ClientHelloSpec` document;
   the engine wraps parsing/`ApplyPreset` in `recover()` (see `safeParseChloJSON`)
   so a bad `chlo_json` returns an error instead of crashing the host process.
@@ -205,23 +277,31 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - **Secure-by-default verification.** `model.DEFAULT_VERIFY` is `True`;
   `FingerprintSpec.verify=None` means "use the default". `freetls.set_default_verify(False)`
   opts out; the test suite does this in `tests/conftest.py` (self-signed servers).
-- **Panic safety.** All C entrypoints (`session_new`, `handshake`, `read`,
-  `write`, `chlo_raw`, `h2_request`, `preset_*`) wrap their bodies in
-  `recover()` so a Go panic returns an error instead of aborting the host.
-- **C-ABI version.** `freetls_abi_version()` (currently `2`) is checked by
+- **Panic safety.** All C entrypoints (`session_new`, `handshake`,
+  `quic_handshake`, `read`, `write`, `chlo_raw`, `h2_request`, `h3_request`,
+  `h3_datagram_*`, `preset_*`) wrap their bodies in `recover()` so a Go panic
+  returns an error instead of aborting the host.
+- **C-ABI version.** `freetls_abi_version()` (currently `3`) is checked by
   `_cffi._check_abi()` when an engine is loaded (`_resolve`/`_load_file`); bump
-  it on an incompatible export change and update `_EXPECTED_ABI`.
+  it on an incompatible export change and update `_EXPECTED_ABI`. Additive
+  exports/fields do **not** need a bump.
   `native/fuzz_test.go` (`FuzzParseSpec`, `FuzzChloJSON`) and
   `native/bench_test.go` cover the JSON/spec parsers. The session registry is
-  mutex-guarded (thread-safe across sessions); a single `TLSSession` is not.
+  mutex-guarded (thread-safe across sessions); a single `TLSSession` is not, but
+  `QUICSession.request` is safe to call concurrently (the Go http3 client
+  multiplexes).
 - **Timeouts are engine-side.** `freetls_set_timeout` (ms) drives the Go read
   deadline; `TLSSession.settimeout` updates both the Python socket and the
   engine. Sessions are blocking-only (`setblocking(False)` raises).
-- **HTTP/2 in the transports is ALPN-driven.** `transport/urllib3_conn.py`
+- **HTTP/2 and HTTP/3 in the transports are ALPN-driven.** `transport/urllib3_conn.py`
   (requests) and `transport/httpx_transport.py` call the Go H2 client when
   `selected_alpn_protocol() == "h2"` (via `transport/_http2.py`), else HTTP/1.1.
-  aiohttp cannot speak HTTP/2, so `transport/aiohttp_connector.py` strips `h2`
-  from the offered ALPN. Hop-by-hop headers are filtered for H2 in `_http2.py`.
+  HTTP/3 is **opt-in** (`http3=True`): the httpx `_open` branches to a
+  `QUICSession` before the TCP connect and `urllib3_conn` opens a UDP session,
+  then `transport/_http3.py` runs the request. `_http2.negotiated_protocol`
+  centralises the ALPN decision. aiohttp cannot speak HTTP/2 (or HTTP/3), so
+  `transport/aiohttp_connector.py` strips `h2` from the offered ALPN.
+  Hop-by-hop headers are filtered for H2/H3.
 - **Certificate suite.** Trust/verify/pinning/mTLS spec fields
   (`verify`, `check_hostname`, `system_roots`, `root_ca`, `ca_dir`, `cadata`,
   `client_cert[_pem]`, `client_key[_pem]`, `pinned_sha256`) live in
@@ -275,6 +355,14 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   concrete reason** (9 not in the OpenSSL 3.5.5 default provider — RC4, 3DES,
   TLS 1.3 CCM, the old ChaCha drafts — and 6 SRP). Adding a suite means it must
   either negotiate here or be added to the documented skip set.
+- QUIC/HTTP-3 is covered by `tests/unit/test_quic.py` (parser + RFC 9001 A.1
+  vectors), `tests/conformance/test_ja4q_vectors.py` (JA4q/JA4Sq vectors),
+  `tests/e2e/test_quic_handshake.py`, `tests/e2e/test_http3.py` (app-data,
+  concurrency, datagrams, httpx + requests) and `tests/e2e/test_quic_suites.py`
+  (the TLS 1.3 suite matrix; the CCM rows skip). The server is
+  `tests/servers/go_http3/` (upstream quic-go); `tests/pcap/test_quic_initial.py`
+  decrypts the Initial and recomputes JA4q independently. `make test-uquic`
+  covers the EVP/CCM patch in both builds.
 - Keep the 85% coverage gate green (`make coverage`); if you add code, add tests.
 
 ## Conventions

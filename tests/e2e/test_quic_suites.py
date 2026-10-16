@@ -49,3 +49,18 @@ def test_quic_ccm_suite_not_negotiable_locally(h3_server, suite, name):
         "Go crypto/tls (and OpenSSL 3.5.5) do not implement TLS 1.3 CCM; the wide "
         "engine covers it at the AEAD level (make test-uquic)"
     )
+
+
+def test_quic_baseline_mode_handshakes(h3_server):
+    from freetls import modes
+
+    session = QUICSession(modes.quic_baseline_spec(server_name="localhost"))
+    try:
+        session.connect("127.0.0.1", h3_server.port, timeout=15)
+        assert session.selected_alpn_protocol() == "h3"
+        assert session.ja4q is not None and session.ja4q.startswith("q")
+        resp = session.request("/")
+        assert resp["status"] == 200
+        assert b"hello-h3" in resp["body"]
+    finally:
+        session.close()

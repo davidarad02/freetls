@@ -20,6 +20,8 @@ from .model import (
     TLS13,
     Extension,
     FingerprintSpec,
+    QuicInitialSpec,
+    TransportParameter,
     get_safe_mode,
 )
 
@@ -45,6 +47,10 @@ DEFAULT_CIPHERS = [
 DEFAULT_SIGALGS = [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601]
 DEFAULT_GROUPS = [0x001D, 0x0017, 0x0018]
 DEFAULT_ALPN = ["h2", "http/1.1"]
+
+# QUIC is TLS 1.3 only, offers h3, and has a QUIC-specific cipher pool.
+DEFAULT_QUIC_ALPN = ["h3"]
+DEFAULT_QUIC_CIPHERS = [0x1301, 0x1302, 0x1303]
 
 # The 16 reserved GREASE values (RFC 8701). Servers ignore these code points,
 # so injecting them makes a ClientHello look browser-like without changing the
@@ -466,3 +472,219 @@ def safe_random(
         verify=verify,
         safe=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# QUIC / HTTP-3 modes
+# ---------------------------------------------------------------------------
+#
+# QUIC is TLS 1.3 only and offers ``h3``. The transport-parameter extension
+# (0x0039) carries the Initial's parameters; note that its *contents and order*
+# do NOT change JA4q, which hashes extension type IDs only. Randomising them
+# therefore varies the wire, not the fingerprint — the JA4q is driven by the
+# cipher list and the set of extension types.
+
+# Extension 0x0039 must never be duplicated by generic padding.
+_QUIC_FUNCTIONAL_EXT_IDS = _FUNCTIONAL_EXT_IDS | {0x0039}
+
+
+def default_quic_transport_parameters() -> list[TransportParameter]:
+    """A realistic, browser-like default QUIC transport-parameter set."""
+    return [
+        TransportParameter.varint("max_idle_timeout", 30000),
+        TransportParameter.varint("max_udp_payload_size", 1472),
+        TransportParameter.varint("initial_max_data", 1048576),
+        TransportParameter.varint("initial_max_stream_data_bidi_local", 262144),
+        TransportParameter.varint("initial_max_stream_data_bidi_remote", 262144),
+        TransportParameter.varint("initial_max_stream_data_uni", 262144),
+        TransportParameter.varint("initial_max_streams_bidi", 100),
+        TransportParameter.varint("initial_max_streams_uni", 3),
+        TransportParameter.varint("max_ack_delay", 25),
+        TransportParameter.varint("active_connection_id_limit", 2),
+        TransportParameter.grease(2),
+    ]
+
+
+def _quic_cipher_pool() -> list[int]:
+    return [c for c in _supported_cipher_pool() if 0x1301 <= c <= 0x1305]
+
+
+def quic_functional_extensions(
+    server_name: str | None,
+    alpn: Sequence[str],
+    groups: Sequence[int | str],
+    sigalgs: Sequence[int | str],
+    transport_parameters: Sequence[TransportParameter],
+) -> list[Extension]:
+    groups = [as_group(g) for g in groups]
+    sigalgs = [as_sigalg(s) for s in sigalgs]
+    exts: list[Extension] = []
+    if server_name:
+        exts.append(Extension.sni(server_name))
+    exts.append(Extension.supported_versions(TLS13))
+    exts.append(Extension.supported_curves(*groups))
+    exts.append(Extension.signature_algorithms(*sigalgs))
+    exts.append(Extension.key_share(groups[0] if groups else 0x001D))
+    exts.append(Extension.psk_key_exchange_modes(1))
+    exts.append(Extension.alpn(*alpn))
+    exts.append(Extension.quic_transport_parameters(*transport_parameters))
+    return exts
+
+
+def quic_baseline_spec(
+    server_name: str | None = None,
+    ciphers: Sequence[int | str] | None = None,
+    alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
+    sigalgs: Sequence[int | str] = DEFAULT_SIGALGS,
+    groups: Sequence[int | str] = DEFAULT_GROUPS,
+    transport_parameters: Sequence[TransportParameter] | None = None,
+    quic: QuicInitialSpec | None = None,
+    datagrams: bool = False,
+    verify: bool | None = None,
+) -> FingerprintSpec:
+    """A functional QUIC ClientHello baseline (TLS 1.3 only, ALPN ``h3``)."""
+    cipher_list = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_QUIC_CIPHERS)]
+    tps = (
+        list(transport_parameters)
+        if transport_parameters is not None
+        else default_quic_transport_parameters()
+    )
+    return FingerprintSpec(
+        ciphers=cipher_list,
+        extensions=quic_functional_extensions(server_name, alpn, groups, sigalgs, tps),
+        vers_min=TLS13,
+        vers_max=TLS13,
+        server_name=server_name,
+        quic=quic if quic is not None else QuicInitialSpec(),
+        quic_datagrams=datagrams,
+        verify=verify,
+    )
+
+
+def quic_specific(
+    ciphers: Iterable[int] | None = None,
+    extensions: Iterable[Extension] | None = None,
+    server_name: str | None = None,
+    alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
+    sigalgs: Sequence[int | str] = DEFAULT_SIGALGS,
+    groups: Sequence[int | str] = DEFAULT_GROUPS,
+    transport_parameters: Sequence[TransportParameter] | None = None,
+    quic: QuicInitialSpec | None = None,
+    datagrams: bool = False,
+    verify: bool | None = None,
+) -> FingerprintSpec:
+    """Specific QUIC mode: exact control. Missing functional extensions are added."""
+    spec = quic_baseline_spec(
+        server_name=server_name,
+        ciphers=list(ciphers) if ciphers is not None else DEFAULT_QUIC_CIPHERS,
+        alpn=alpn,
+        sigalgs=sigalgs,
+        groups=groups,
+        transport_parameters=transport_parameters,
+        quic=quic,
+        datagrams=datagrams,
+        verify=verify,
+    )
+    if extensions is not None:
+        spec.extensions = list(extensions)
+    return spec
+
+
+def _quic_random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[int]:
+    pool = [c for c in _quic_cipher_pool() if c not in used]
+    return rng.sample(pool, min(n, len(pool)))
+
+
+def quic_partial_random(
+    server_name: str | None = None,
+    ciphers: Sequence[int | str] | None = None,
+    alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
+    n_random_ciphers: int | None = None,
+    n_random_extensions: int | None = None,
+    transport_parameters: Sequence[TransportParameter] | None = None,
+    quic: QuicInitialSpec | None = None,
+    datagrams: bool = False,
+    seed: int | None = None,
+    verify: bool | None = None,
+    safe: bool | None = None,
+) -> FingerprintSpec:
+    """Partial-random QUIC mode: baseline + randomized TLS 1.3 cipher/extension padding."""
+    use_safe = get_safe_mode() if safe is None else bool(safe)
+    rng = random.Random(seed)
+    base = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_QUIC_CIPHERS)]
+    used_c = set(base)
+    if n_random_ciphers is None:
+        if use_safe:
+            available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
+            n_random_ciphers = _adaptive_random_count(available)
+        else:
+            n_random_ciphers = 2
+    base += _quic_random_cipher_padding(rng, n_random_ciphers, used_c)
+
+    spec = quic_baseline_spec(
+        server_name=server_name,
+        ciphers=base,
+        alpn=alpn,
+        transport_parameters=transport_parameters,
+        quic=quic,
+        datagrams=datagrams,
+        verify=verify,
+    )
+    if n_random_extensions is None:
+        if use_safe:
+            n_random_extensions = rng.randint(0, _free_safe_ext_count())
+        else:
+            n_random_extensions = _UNSAFE_RANDOM_EXT_COUNT
+    used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
+    if use_safe:
+        spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
+    else:
+        spec.extensions += _random_generic_exts(rng, n_random_extensions, used_e)
+    return spec
+
+
+def quic_true_random(
+    server_name: str | None = None,
+    alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
+    n_ciphers: int | None = None,
+    n_extensions: int | None = None,
+    transport_parameters: Sequence[TransportParameter] | None = None,
+    quic: QuicInitialSpec | None = None,
+    datagrams: bool = False,
+    seed: int | None = None,
+    verify: bool | None = None,
+    safe: bool | None = None,
+) -> FingerprintSpec:
+    """True-random QUIC mode: maximal padding over the TLS 1.3 cipher pool."""
+    use_safe = get_safe_mode() if safe is None else bool(safe)
+    rng = random.Random(seed)
+    core = [0x1301]
+    used_c = set(core)
+    if n_ciphers is None:
+        if use_safe:
+            available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
+            n_ciphers = len(core) + _adaptive_random_count(available)
+        else:
+            n_ciphers = len(_quic_cipher_pool())
+    ciphers = core + _quic_random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
+
+    spec = quic_baseline_spec(
+        server_name=server_name,
+        ciphers=ciphers,
+        alpn=alpn,
+        transport_parameters=transport_parameters,
+        quic=quic,
+        datagrams=datagrams,
+        verify=verify,
+    )
+    if n_extensions is None:
+        if use_safe:
+            n_extensions = rng.randint(0, _free_safe_ext_count())
+        else:
+            n_extensions = _UNSAFE_RANDOM_EXT_COUNT
+    used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
+    if use_safe:
+        spec.extensions += _safe_random_exts(rng, n_extensions, used_e)
+    else:
+        spec.extensions += _random_generic_exts(rng, n_extensions, used_e)
+    return spec

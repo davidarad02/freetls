@@ -484,6 +484,9 @@ class FingerprintSpec:
         }
         if self.preset is not None:
             out["preset"] = self.preset
+        # The preset_no_sni / preset_alpn overrides also apply to QUIC presets
+        # (quic_id), where there is no `preset`.
+        if self.preset is not None or self.quic_id is not None:
             out["preset_no_sni"] = self.preset_no_sni
             if self.preset_alpn is not None:
                 if len(self.preset_alpn) == 0:

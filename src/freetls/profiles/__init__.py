@@ -26,17 +26,28 @@ class Profile:
     name: str
     alias: str
     preset: str | None = None
+    quic_id: str | None = None
     no_sni: bool = False
     alpn: list | None = None
     ja4: str = ""
     ja4_a: str = ""
     ja3: str = ""
+    ja4q: str = ""
+    ja4q_a: str = ""
     chlo_json: str | None = None
 
     def spec(self, server_name: str | None = None, verify: bool | None = None):
         """Return a :class:`~freetls.model.FingerprintSpec` for this profile."""
         from ..model import FingerprintSpec
 
+        if self.quic_id is not None:
+            return FingerprintSpec(
+                quic_id=self.quic_id,
+                preset_no_sni=self.no_sni,
+                preset_alpn=None if self.alpn is None else list(self.alpn),
+                server_name=server_name,
+                verify=verify,
+            )
         if self.chlo_json is not None:
             return FingerprintSpec(
                 chlo_json=self.chlo_json,
@@ -99,53 +110,72 @@ def _compute_fingerprints(
     return j4["ja4"], j4["ja4_a"], j3["ja3"]
 
 
+def _compute_quic_fingerprints(*, quic_id: str, no_sni: bool, alpn) -> tuple[str, str]:
+    """Return (ja4q, ja4q_a) computed from the engine, offline."""
+    from .. import engine
+    from ..fingerprint import ja4_from_bytes
+
+    raw = engine.quic_id_raw(quic_id, no_sni=no_sni, alpn=alpn)
+    if not raw:
+        raise ValueError(f"could not build a QUIC ClientHello for {quic_id!r}")
+    j4 = ja4_from_bytes(raw, transport="q")
+    return j4["ja4"], j4["ja4_a"]
+
+
 def add_profile(
     name: str,
     *,
     alias: str | None = None,
     preset: str | None = None,
+    quic_id: str | None = None,
     chlo_json: str | None = None,
     no_sni: bool = False,
     alpn: list | None = None,
     ja4: str | None = None,
+    ja4q: str | None = None,
     ja3: str | None = None,
 ) -> Profile:
     """Register a profile at runtime and return it.
 
-    Provide either ``preset`` (a uTLS preset name such as ``"HelloChrome_155"``)
-    or ``chlo_json`` (a uTLS ClientHelloSpec JSON document). ``ja4``/``ja3`` are
-    computed from the engine when omitted. The profile becomes visible via
-    :func:`get`, :func:`names` and :func:`list_profiles`.
+    Provide exactly one of ``preset`` (a uTLS preset name such as
+    ``"HelloChrome_155"``), ``quic_id`` (a uQUIC preset name such as
+    ``"QUICChrome_146_IPv4"``) or ``chlo_json`` (a uTLS ClientHelloSpec JSON
+    document). ``ja4``/``ja4q``/``ja3`` are computed from the engine when
+    omitted. The profile becomes visible via :func:`get`, :func:`names` and
+    :func:`list_profiles`.
     """
-    if (preset is None) == (chlo_json is None):
-        raise ValueError("provide exactly one of preset= or chlo_json=")
+    if sum(x is not None for x in (preset, chlo_json, quic_id)) != 1:
+        raise ValueError("provide exactly one of preset=, chlo_json= or quic_id=")
     alias = alias or _alias_for(name)
+    ja4 = ja4 or ""
+    ja4_a = ""
+    ja3 = ja3 or ""
+    ja4q = ja4q or ""
+    ja4q_a = ""
+    if quic_id is not None:
+        if not ja4q:
+            ja4q, ja4q_a = _compute_quic_fingerprints(quic_id=quic_id, no_sni=no_sni, alpn=alpn)
+    elif not ja4 or not ja3:
+        c_ja4, c_ja4a, c_ja3 = _compute_fingerprints(
+            preset=preset, no_sni=no_sni, alpn=alpn, chlo_json=chlo_json
+        )
+        ja4 = ja4 or c_ja4
+        ja4_a = c_ja4a
+        ja3 = ja3 or c_ja3
     profile = Profile(
         name=name,
         alias=alias,
         preset=preset,
+        quic_id=quic_id,
         no_sni=no_sni,
         alpn=alpn,
-        ja4=ja4 or "",
-        ja4_a="",
-        ja3=ja3 or "",
+        ja4=ja4,
+        ja4_a=ja4_a,
+        ja3=ja3,
+        ja4q=ja4q,
+        ja4q_a=ja4q_a,
         chlo_json=chlo_json,
     )
-    if not profile.ja4 or not profile.ja3:
-        c_ja4, c_ja4a, c_ja3 = _compute_fingerprints(
-            preset=preset, no_sni=no_sni, alpn=alpn, chlo_json=chlo_json
-        )
-        profile = Profile(
-            name=name,
-            alias=alias,
-            preset=preset,
-            no_sni=no_sni,
-            alpn=alpn,
-            ja4=profile.ja4 or c_ja4,
-            ja4_a=c_ja4a,
-            ja3=profile.ja3 or c_ja3,
-            chlo_json=chlo_json,
-        )
     _EXTRA[alias] = profile
     _EXTRA[name] = profile
     _REGISTERED[alias] = profile
@@ -161,7 +191,7 @@ def load_file(path: str) -> int:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     entries = data["profiles"] if isinstance(data, dict) else data
-    allowed = {"alias", "preset", "chlo_json", "no_sni", "alpn", "ja4", "ja3"}
+    allowed = {"alias", "preset", "quic_id", "chlo_json", "no_sni", "alpn", "ja4", "ja4q", "ja3"}
     n = 0
     for e in entries:
         e = dict(e)
@@ -193,30 +223,33 @@ def get(name_or_alias: str) -> Profile | None:
 
 
 def find_ja4(query: str, *, limit: int = 25) -> list:
-    """Profiles whose JA4 equals, starts with, or contains ``query``."""
+    """Profiles whose JA4 (or JA4q) equals, starts with, or contains ``query``."""
     q = query.strip().lower()
     if not q:
         return []
     out = []
     for p in list_profiles():
-        if not p.ja4:
-            continue
-        j = p.ja4.lower()
-        if j == q or j.startswith(q) or q in j:
-            out.append(p)
+        for j in (p.ja4, p.ja4q):
+            if not j:
+                continue
+            jl = j.lower()
+            if jl == q or jl.startswith(q) or q in jl:
+                out.append(p)
+                break
         if len(out) >= limit:
             break
     return out
 
 
 def search(query: str, *, limit: int = 25) -> list:
-    """Profiles whose name, alias or JA3 contains ``query`` (case-insensitive)."""
+    """Profiles whose name, alias, quic_id or JA3/JA4q contains ``query``."""
     q = query.strip().lower()
     if not q:
         return []
     out = []
     for p in list_profiles():
-        if q in p.name.lower() or q in p.alias.lower() or q in p.ja3.lower():
+        haystack = (p.name.lower(), p.alias.lower(), p.ja3.lower(), p.ja4q.lower())
+        if q in (p.quic_id or "").lower() or any(q in h for h in haystack):
             out.append(p)
         if len(out) >= limit:
             break
@@ -267,11 +300,39 @@ def h2_bundle(
     return prof_spec
 
 
+def h3_bundle(
+    name_or_alias: str,
+    *,
+    quic=None,
+    datagrams: bool = False,
+    server_name: str | None = None,
+    verify: bool | None = None,
+):
+    """Return a QUIC profile spec with HTTP/3 controls applied.
+
+    ``quic`` overrides the Initial-packet shape (a
+    :class:`~freetls.model.QuicInitialSpec`); ``datagrams`` enables RFC 9297
+    HTTP/3 datagrams.
+    """
+    prof_spec = spec(name_or_alias, server_name=server_name, verify=verify)
+    if quic is not None:
+        prof_spec.quic = quic
+    if datagrams:
+        prof_spec.quic_datagrams = True
+    return prof_spec
+
+
 def catalog_info() -> dict:
     d = _load()
+    profiles = d["profiles"]
+    tcp = [p for p in profiles if not p.get("quic_id")]
+    quic = [p for p in profiles if p.get("quic_id")]
     return {
         "count": d["count"],
-        "distinct_ja4": len({p["ja4"] for p in d["profiles"]}),
+        "tcp_count": len(tcp),
+        "quic_count": len(quic),
+        "distinct_ja4": len({p["ja4"] for p in tcp if p.get("ja4")}),
+        "distinct_ja4q": len({p["ja4q"] for p in quic if p.get("ja4q")}),
         "registered": len(_REGISTERED),
         "total": d["count"] + len(_REGISTERED),
         "generated_by": d.get("generated_by"),

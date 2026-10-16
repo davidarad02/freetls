@@ -1,5 +1,5 @@
 {
- "count": 220,
+ "count": 248,
  "engine_version": "freetls/0.0.1",
  "generated_by": "tools/gen_catalog.py",
  "profiles": [
@@ -2290,6 +2290,260 @@
    "name": "HelloSafari_Auto_nosni_noalpn",
    "no_sni": true,
    "preset": "HelloSafari_Auto"
+  },
+  {
+   "alias": "quicfirefox_116a",
+   "alpn": null,
+   "ja4q": "q13d0314h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d0314h3",
+   "name": "QUICFirefox_116A",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116A"
+  },
+  {
+   "alias": "quicfirefox_116a_noalpn",
+   "alpn": [],
+   "ja4q": "q13d031300_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d031300",
+   "name": "QUICFirefox_116A_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116A"
+  },
+  {
+   "alias": "quicfirefox_116a_nosni",
+   "alpn": null,
+   "ja4q": "q13i0313h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i0313h3",
+   "name": "QUICFirefox_116A_nosni",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116A"
+  },
+  {
+   "alias": "quicfirefox_116a_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i031200_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i031200",
+   "name": "QUICFirefox_116A_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116A"
+  },
+  {
+   "alias": "quicfirefox_116b",
+   "alpn": null,
+   "ja4q": "q13d0314h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d0314h3",
+   "name": "QUICFirefox_116B",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116B"
+  },
+  {
+   "alias": "quicfirefox_116b_noalpn",
+   "alpn": [],
+   "ja4q": "q13d031300_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d031300",
+   "name": "QUICFirefox_116B_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116B"
+  },
+  {
+   "alias": "quicfirefox_116b_nosni",
+   "alpn": null,
+   "ja4q": "q13i0313h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i0313h3",
+   "name": "QUICFirefox_116B_nosni",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116B"
+  },
+  {
+   "alias": "quicfirefox_116b_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i031200_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i031200",
+   "name": "QUICFirefox_116B_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116B"
+  },
+  {
+   "alias": "quicfirefox_116c",
+   "alpn": null,
+   "ja4q": "q13d0314h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d0314h3",
+   "name": "QUICFirefox_116C",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116C"
+  },
+  {
+   "alias": "quicfirefox_116c_noalpn",
+   "alpn": [],
+   "ja4q": "q13d031300_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13d031300",
+   "name": "QUICFirefox_116C_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICFirefox_116C"
+  },
+  {
+   "alias": "quicfirefox_116c_nosni",
+   "alpn": null,
+   "ja4q": "q13i0313h3_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i0313h3",
+   "name": "QUICFirefox_116C_nosni",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116C"
+  },
+  {
+   "alias": "quicfirefox_116c_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i031200_55b375c5d22e_2d2a40a25571",
+   "ja4q_a": "q13i031200",
+   "name": "QUICFirefox_116C_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICFirefox_116C"
+  },
+  {
+   "alias": "quicchrome_115_ipv4",
+   "alpn": null,
+   "ja4q": "q13d0310h3_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13d0310h3",
+   "name": "QUICChrome_115_IPv4",
+   "no_sni": false,
+   "quic_id": "QUICChrome_115_IPv4"
+  },
+  {
+   "alias": "quicchrome_115_ipv4_noalpn",
+   "alpn": [],
+   "ja4q": "q13d030900_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13d030900",
+   "name": "QUICChrome_115_IPv4_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICChrome_115_IPv4"
+  },
+  {
+   "alias": "quicchrome_115_ipv4_nosni",
+   "alpn": null,
+   "ja4q": "q13i0309h3_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13i0309h3",
+   "name": "QUICChrome_115_IPv4_nosni",
+   "no_sni": true,
+   "quic_id": "QUICChrome_115_IPv4"
+  },
+  {
+   "alias": "quicchrome_115_ipv4_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i030800_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13i030800",
+   "name": "QUICChrome_115_IPv4_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICChrome_115_IPv4"
+  },
+  {
+   "alias": "quicchrome_115_ipv6",
+   "alpn": null,
+   "ja4q": "q13d0310h3_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13d0310h3",
+   "name": "QUICChrome_115_IPv6",
+   "no_sni": false,
+   "quic_id": "QUICChrome_115_IPv6"
+  },
+  {
+   "alias": "quicchrome_115_ipv6_noalpn",
+   "alpn": [],
+   "ja4q": "q13d030900_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13d030900",
+   "name": "QUICChrome_115_IPv6_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICChrome_115_IPv6"
+  },
+  {
+   "alias": "quicchrome_115_ipv6_nosni",
+   "alpn": null,
+   "ja4q": "q13i0309h3_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13i0309h3",
+   "name": "QUICChrome_115_IPv6_nosni",
+   "no_sni": true,
+   "quic_id": "QUICChrome_115_IPv6"
+  },
+  {
+   "alias": "quicchrome_115_ipv6_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i030800_55b375c5d22e_cd85d2d88918",
+   "ja4q_a": "q13i030800",
+   "name": "QUICChrome_115_IPv6_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICChrome_115_IPv6"
+  },
+  {
+   "alias": "quicchrome_146_ipv4",
+   "alpn": null,
+   "ja4q": "q13d0311h3_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13d0311h3",
+   "name": "QUICChrome_146_IPv4",
+   "no_sni": false,
+   "quic_id": "QUICChrome_146_IPv4"
+  },
+  {
+   "alias": "quicchrome_146_ipv4_noalpn",
+   "alpn": [],
+   "ja4q": "q13d031000_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13d031000",
+   "name": "QUICChrome_146_IPv4_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICChrome_146_IPv4"
+  },
+  {
+   "alias": "quicchrome_146_ipv4_nosni",
+   "alpn": null,
+   "ja4q": "q13i0310h3_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13i0310h3",
+   "name": "QUICChrome_146_IPv4_nosni",
+   "no_sni": true,
+   "quic_id": "QUICChrome_146_IPv4"
+  },
+  {
+   "alias": "quicchrome_146_ipv4_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i030900_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13i030900",
+   "name": "QUICChrome_146_IPv4_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICChrome_146_IPv4"
+  },
+  {
+   "alias": "quicchrome_146_ipv6",
+   "alpn": null,
+   "ja4q": "q13d0311h3_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13d0311h3",
+   "name": "QUICChrome_146_IPv6",
+   "no_sni": false,
+   "quic_id": "QUICChrome_146_IPv6"
+  },
+  {
+   "alias": "quicchrome_146_ipv6_noalpn",
+   "alpn": [],
+   "ja4q": "q13d031000_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13d031000",
+   "name": "QUICChrome_146_IPv6_noalpn",
+   "no_sni": false,
+   "quic_id": "QUICChrome_146_IPv6"
+  },
+  {
+   "alias": "quicchrome_146_ipv6_nosni",
+   "alpn": null,
+   "ja4q": "q13i0310h3_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13i0310h3",
+   "name": "QUICChrome_146_IPv6_nosni",
+   "no_sni": true,
+   "quic_id": "QUICChrome_146_IPv6"
+  },
+  {
+   "alias": "quicchrome_146_ipv6_nosni_noalpn",
+   "alpn": [],
+   "ja4q": "q13i030900_55b375c5d22e_653d80c3fe9d",
+   "ja4q_a": "q13i030900",
+   "name": "QUICChrome_146_IPv6_nosni_noalpn",
+   "no_sni": true,
+   "quic_id": "QUICChrome_146_IPv6"
   }
- ]
+ ],
+ "quic_count": 28,
+ "tcp_count": 220
 }

@@ -16,8 +16,9 @@ Related: `AGENTS.md` (architecture/wiring facts), `README.md`.
 > completes **144** suites and the Go-only alternate **78** (not 51/27), and the
 > safe-mode catalog pass rate is **95/220** (not 75/220). Where this document
 > still says "out of scope" for P3/P4/P5, §0's post-plan note and `AGENTS.md`
-> are authoritative. GOST/SEED, native ECH/ALPS/trust_anchors semantics, and
-> HTTP/3 remain out of scope.
+> are authoritative. GOST/SEED and native ECH/ALPS/trust_anchors semantics
+> remain out of scope. **HTTP/3/QUIC** was also implemented after this plan, as
+> **Route C** — see `docs/route-c-plan.md`.
 
 ## 0. Status and deviations (measured against OpenSSL 3.5.5)
 
@@ -348,12 +349,13 @@ all transports/cert-suite/H2/timeouts, and the backed profiles (75 at plan time,
 ## 10. Out of scope
 **Superseded in part** — P3 (DHE/DSS), P4 (anonymous suites) and the non-GOST
 parts of P5 (PSK/SRP) have since been implemented in the uTLS fork; see the
-post-plan note in §0 and `AGENTS.md`. Still out of scope: **GOST/SEED**;
+post-plan note in §0 and `AGENTS.md`. **HTTP/3/QUIC** is now implemented too
+(Route C — `docs/route-c-plan.md`). Still out of scope: **GOST/SEED**;
 Windows/macOS build targets (the OpenSSL `Configure` target is hardcoded to
 `linux-x86_64`); arbitrary extension-order / GREASE control changes (Gaps 1–2
 unaffected for JA4); native ECH/ALPS/trust_anchors/record_size_limit semantics;
-**HTTP/3/QUIC**; TLS key-log (`SSLKEYLOGFILE`) export; certificate revocation
-checking; session-ticket import/export.
+TLS key-log (`SSLKEYLOGFILE`) export; certificate revocation checking;
+session-ticket import/export.
 
 ---
 

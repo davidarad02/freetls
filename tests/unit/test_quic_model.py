@@ -142,3 +142,42 @@ def test_quic_preset_list_and_build():
 def test_quic_id_raw_unknown_preset_raises():
     with pytest.raises(SpecError, match="quic preset"):
         engine.quic_id_raw("QUICNope_1")
+
+
+def test_quic_modes_build_and_are_quic():
+    from freetls import modes
+    from freetls.fingerprint import ja4_from_bytes
+
+    specs = [
+        modes.quic_baseline_spec(server_name="localhost"),
+        modes.quic_specific(server_name="localhost"),
+        modes.quic_partial_random(server_name="localhost", seed=1),
+        modes.quic_true_random(server_name="localhost", seed=1),
+    ]
+    for spec in specs:
+        engine_json = spec.to_engine()
+        assert engine_json["transport"] == "quic"
+        assert spec.vers_min == TLS13 and spec.vers_max == TLS13
+        raw = engine.spec_raw(engine_json)
+        assert ja4_from_bytes(raw, transport="q")["ja4"].startswith("q")
+
+
+def test_quic_modes_safe_pass_validation():
+    from freetls import modes
+
+    for spec in (
+        modes.quic_baseline_spec(server_name="localhost"),
+        modes.quic_partial_random(server_name="localhost", seed=1, safe=True),
+        modes.quic_true_random(server_name="localhost", seed=1, safe=True),
+    ):
+        spec.safe = True
+        validate(spec)  # does not raise
+
+
+def test_quic_baseline_mode_datagrams():
+    from freetls import modes
+
+    spec = modes.quic_baseline_spec(server_name="localhost", datagrams=True)
+    assert spec.quic_datagrams is True
+    assert spec.to_engine()["quic_datagrams"] is True
+    assert modes.quic_baseline_spec().to_engine().get("quic_datagrams") is None

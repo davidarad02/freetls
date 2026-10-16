@@ -15,14 +15,16 @@ Highlights:
 - **JA4** control to a very high degree, with **JA3** and **JA4S** reporting.
 - Three modes: **Specific**, **Partially-random**, **True-random**.
 - Real **TLS 1.0–1.3** handshakes (completed where the server allows); no SSLv3.
-- A catalog of **220 common-JA4 profiles** derived from uTLS's real, current
-  browser presets (Chrome up to 155, Firefox 148, Safari 26.3, Edge, iOS, Android/OkHttp, 360, QQ, Go).
+- A catalog of **248 common-JA4 profiles** derived from uTLS's real, current
+  browser presets (Chrome up to 155, Firefox 148, Safari 26.3, Edge, iOS, Android/OkHttp, 360, QQ, Go) plus 28 QUIC profiles.
 - Drop-in **requests**, **httpx** (sync + async) and **aiohttp** transports;
   requests and httpx select **HTTP/2 automatically via ALPN** (aiohttp is
   HTTP/1.1-only and offers a safe ALPN).
 - An `ssl.SSLContext`-style `wrap_socket()` API.
 - Go-side **HTTP/2** with controllable SETTINGS / WINDOW_UPDATE / pseudo-header
   order.
+- **HTTP/3 / QUIC**: a spoofable QUIC Initial, JA4q/JA4Sq, a concurrent
+  `QUICSession`, RFC 9297 datagrams, and opt-in HTTP/3 in the transports.
 - **Self-verification**: JA4/JA3/JA4S are recomputed from the exact bytes the
   engine emitted and received.
 
@@ -51,6 +53,7 @@ third-party fingerprint services.
 - [Safe & unsafe mode](#safe--unsafe-mode)
 - [Wide cipher support (libcrypto)](#wide-cipher-support-libcrypto)
 - [HTTP/2](#http2)
+- [HTTP/3](#http3)
 - [Certificate verification](#certificate-verification)
 - [Timeouts](#timeouts)
 - [Self-verification](#self-verification)
@@ -661,7 +664,50 @@ a general HTTP/2 stack. The current gaps:
   Server push is disabled by default (`SETTINGS_ENABLE_PUSH=0`) and is not
   handled even if you re-enable it through `h2_settings`.
 - **aiohttp cannot speak HTTP/2 at all** (see below) — it is HTTP/1.1-only.
-- **No HTTP/3 / QUIC** (see [Limitations](#limitations)).
+
+## HTTP/3
+
+HTTP/3 is available on both engines, built on the vendored **uQUIC** fork of
+quic-go (itself built on our uTLS fork). Python owns the UDP socket and passes a
+dup'd fd to Go; JA4q/JA4Sq are computed from the bytes the stack actually
+emitted. HTTP/3 is **opt-in** (Alt-Svc discovery is out of scope), and the
+transport multiplexes on the wire, so concurrent requests share one QUIC
+connection.
+
+```python
+import freetls
+from freetls import modes
+
+spec = modes.quic_baseline_spec(server_name="example.com")
+with freetls.QUICSession(spec) as s:
+    s.connect("example.com", 443, server_hostname="example.com")
+    r = s.request("/", headers=[["user-agent", "freetls"], ["accept", "*/*"]])
+    print(r["status"], r["body"])
+    print(s.ja4q, s.ja4sq)
+```
+
+- `QUICSession.request(path, method="GET", headers=None, body=b"")` mirrors
+  `h2_request`; it returns `status`, `headers`, `body`, `body_b64` and the JA4H.
+- `modes.quic_baseline_spec` / `quic_specific` / `quic_partial_random` /
+  `quic_true_random` build TLS-1.3-only, `h3`-ALPN QUIC specs.
+- `profiles.get("QUICChrome_146_IPv4")` returns a QUIC profile; the catalog
+  merges 28 QUIC entries (7 uQUIC fingerprints × 4 variants) with the TCP ones,
+  and `find_ja4`/`search` span both.
+- RFC 9297 datagrams are opt-in: set `spec.quic_datagrams = True`, then use
+  `open_datagram_flow()` / `send_datagram()` / `recv_datagram()`.
+- Through the transports, HTTP/3 is opt-in:
+  `FreeTLSTransport(..., http3=True)` and `JA4Adapter(..., http3=True)`.
+
+### HTTP/3 limitations
+
+- **No Alt-Svc / HTTPS-RR discovery.** The caller asks for HTTP/3; freetls does
+  not discover it.
+- **No proxies over QUIC** (CONNECT-UDP/MASQUE).
+- **aiohttp stays HTTP/1.1-only** (as it is for HTTP/2).
+- **TLS 1.3 CCM is not negotiable end-to-end** against Go/OpenSSL servers (it is
+  covered at the AEAD level); see [Limitations](#limitations).
+- **0-RTT, session resumption and ECH over QUIC are not implemented yet**
+  (designed for; see `docs/route-c-plan.md`).
 
 ## Streaming & content decoding
 
@@ -866,6 +912,7 @@ session.server_hello    # bytes: the ServerHello received (for JA4S)
 | `freetls.JA4Adapter` | requests transport adapter (lazy; needs `requests`) |
 | `freetls.transport` | transport package (requests/httpx/aiohttp) |
 | `freetls.TLSSession` | socket-like TLS session |
+| `freetls.QUICSession` | socket-like QUIC/HTTP-3 session (concurrent; `ja4q`/`ja4sq`) |
 | `freetls.TLSContext` | `ssl`-style context with `wrap_socket` |
 | `freetls.FingerprintSpec`, `freetls.Extension` | the spec model |
 | `freetls.Cipher`, `freetls.ExtensionType`, `freetls.SignatureScheme`, `freetls.NamedGroup` | IANA `IntEnum` constants (int-compatible; names/ints interchangeable) |
@@ -897,6 +944,8 @@ or `wrap_socket(sock, server_hostname)`.
 - Response extras: `did_resume`, `ocsp_response`, `signed_certificate_timestamps`,
   `peer_application_settings`.
 - HTTP/2: `h2_request(...)`.
+- HTTP/3 (`QUICSession`): `request(...)`, `open_datagram_flow(...)`,
+  `send_datagram(...)`, `recv_datagram(...)`, `ja4q`, `ja4q_r`, `ja4sq`.
 
 ### `TLSContext`
 
@@ -1046,7 +1095,8 @@ print(ws.recv())
 ws.close()
 ```
 
-HTTP/3 / QUIC is intentionally not supported. `_http2` is the shared HTTP/2 path.
+`_http2` is the shared HTTP/2 path and `_http3` the shared HTTP/3 path; the
+transports dispatch on the ALPN the handshake negotiated (`_http2.negotiated_protocol`).
 
 ---
 
@@ -1098,12 +1148,12 @@ not the universe, is the binding limit.
 ```
 Python:  requests / httpx / aiohttp / ssl-style wrap_socket
                │
-         freetls.session.TLSSession  (socket-like)
+         freetls.session.TLSSession      freetls.quic.QUICSession
                │  cffi  (freetls.engine._cffi)
-Go:      native/engine.go  +  native/httpx_h2.go
+Go:      native/engine.go + native/httpx_h2.go + native/quic.go + native/httpx_h3.go
                │  uTLS ClientHello override
                ▼
-         crypto/tls (TLS 1.0–1.3)  +  x/net/http2
+         crypto/tls (TLS 1.0–1.3) + x/net/http2 + uQUIC (QUIC/HTTP-3)
 ```
 
 - Python owns the TCP connect and hands a **dup'd fd** to Go; the Go engine
@@ -1113,6 +1163,10 @@ Go:      native/engine.go  +  native/httpx_h2.go
   emitted ClientHello and received ServerHello for fingerprinting.
 - `native/httpx_h2.go` implements HTTP/2 over the same connection using
   `x/net/http2`'s Framer + HPACK, so the H2 fingerprint fields are explicit.
+- For QUIC, Python owns the **UDP** socket (passed as a dup'd fd →
+  `net.FilePacketConn`); `native/quic.go` drives the handshake through the
+  vendored **uQUIC** fork and `native/httpx_h3.go` runs HTTP/3 (requests and RFC
+  9297 datagrams) over that one connection via a single `http3.ClientConn`.
 
 ### Thread safety and the engine ABI
 
@@ -1120,12 +1174,13 @@ The native engine keeps a mutex-guarded session registry: all C entrypoints are
 safe to call from multiple threads, sessions are independent, and every
 entrypoint wraps its body in `recover()` so a Go panic becomes a Python error
 instead of aborting the host process. The C surface carries an ABI version
-(`engine.abi_version()`, currently `2`); the binding refuses to load an engine
+(`engine.abi_version()`, currently `3`); the binding refuses to load an engine
 whose major version does not match, so a stale `libfreetls.so` fails loudly.
 
 A single `TLSSession` is **not** internally synchronised — use one session per
-thread (or the transports, which open a connection per request). Go fuzz and
-benchmark targets cover the spec JSON parser:
+thread (or the transports, which open a connection per request). `QUICSession`
+is safe for concurrent `request()` calls (the Go http3 client multiplexes). Go
+fuzz and benchmark targets cover the spec JSON parser:
 
 ```bash
 cd native && go test ./...                 # includes fuzz seeds + benchmarks
@@ -1265,12 +1320,12 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
 These are deliberately unimplemented areas, documented so they can be planned
 around rather than discovered in production.
 
-- **HTTP/3 and QUIC are not implemented.** freetls is TCP-only: there is no QUIC
-  transport, no QUIC Initial-packet / transport-parameter fingerprinting, no
-  TLS-1.3-over-QUIC handshake, no 0-RTT, and no `h3`/`h3-29` ALPN handling. The
-  HTTP/2 and HTTP/1.1 transports are the only ones. HTTP/3 is out of scope for
-  the current design (the engine is a TCP socket + TLS record layer), not merely
-  untested.
+- **HTTP/3 is supported but not discovered.** The QUIC transport, QUIC
+  Initial-packet / transport-parameter control, the TLS-1.3-over-QUIC handshake,
+  JA4q/JA4Sq, RFC 9297 datagrams and `h3` ALPN are implemented (see
+  [HTTP/3](#http3)); there is no Alt-Svc / HTTPS-RR discovery, no
+  CONNECT-UDP/MASQUE, aiohttp stays HTTP/1.1-only, and 0-RTT / session
+  resumption / ECH over QUIC are deferred (designed for).
 - **HTTP/2 coverage is fingerprint-shaped, not production-shaped.** See
   [HTTP/2 limitations](#http2-limitations) for the detail: single-frame
   HEADERS/DATA writes with no `MAX_FRAME_SIZE` splitting (a **known limitation**
