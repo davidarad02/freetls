@@ -11,6 +11,36 @@ Python via `cffi`. Only the ClientHello is overridden; all cryptography is Go
 `crypto/tls`. There is no monorepo — one Python package (`src/freetls`) plus a
 Go module (`native/`), and no git repo/CI in the worktree.
 
+## Route B — single engine with a libcrypto (OpenSSL EVP) backend
+
+The approved plan lives in **`docs/route-b-plan.md`**; treat it as the source of
+truth (locked decisions D1–D11, fork/registration mechanics, crypto-bridge
+scope, safe-mode whitelist, risk table, and measured deviations).
+
+Status: **complete.** M1 (fork scaffolding), M2 (EVP AEAD + P1 + TLS 1.3 CCM),
+M3 (P2 Camellia-CBC), M4 (safe/unsafe mode, ABI 2) and M5 (packaging) are done.
+The wide engine completes **51** suites (27 Go-only + 24 Route B).
+
+- The uTLS fork is vendored at `native/third_party/utls` (a nested module; the
+  top-level `native/go.mod` has the `replace`). Keep fork changes in **new files
+  only** and re-run `tools/rebase_utls.sh` after bumping uTLS.
+- All libcrypto code is behind the `freetls_libcrypto` build tag. Build the wide
+  engine with `make libcrypto` (dynamic system libcrypto) or `make full`
+  (statically linked from the `native/third_party/openssl` submodule, symbols
+  hidden). The default `make native` stays Go-only. Run the fork's EVP tests with
+  `make test-libcrypto`.
+- Route B e2e tests live in `tests/e2e/test_route_b_suites.py`; they build the
+  wide engine and drive it via `tests/_route_b_client.py` in a subprocess (the
+  cffi binding loads one engine per process). `tests/e2e/test_full_engine.py`
+  covers the static link and interposition with Python `ssl`.
+- Safe mode: `freetls.set_safe_mode` / `FingerprintSpec.safe`, validated in
+  `src/freetls/safety.py`; the extension whitelist and backed ciphers come from
+  the engine (`freetls.engine.supported_ciphers/_extensions`). Default is
+  **unsafe**.
+- Deviations: Camellia-GCM and ARIA-CBC are absent from OpenSSL 3.5.5 (dropped);
+  TLS 1.3 CCM is implemented but not negotiable against local OpenSSL/Go servers
+  (AEAD-verified only). See `docs/route-b-plan.md` §0.
+
 ## Commands (use these; don't guess)
 
 All Python commands use the project venv (`.venv/`), not the system Python.

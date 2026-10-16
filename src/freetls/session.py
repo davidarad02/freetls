@@ -7,7 +7,7 @@ import os
 import socket
 
 from .engine import EngineSession, EngineState
-from .errors import FreeTLSError, HandshakeError
+from .errors import FreeTLSError, HandshakeError, SpecError
 from .fingerprint import ja3_from_bytes, ja4_from_bytes, ja4s_from_bytes
 from .model import FingerprintSpec
 
@@ -73,7 +73,7 @@ class TLSSession:
         sock = socket.create_connection((host, port), timeout=timeout)
         try:
             return self.wrap_socket(sock, server_hostname=server_hostname or host)
-        except HandshakeError:
+        except (HandshakeError, SpecError):
             self._cleanup()
             sock.close()
             raise
@@ -94,7 +94,7 @@ class TLSSession:
         sock = open_tunnel(proxy, host, port, timeout=timeout)
         try:
             return self.wrap_socket(sock, server_hostname=server_hostname or host)
-        except HandshakeError:
+        except (HandshakeError, SpecError):
             self._cleanup()
             sock.close()
             raise
@@ -122,6 +122,9 @@ class TLSSession:
             return
         if self._sock is None:
             raise FreeTLSError("cannot handshake: no socket; call connect()/wrap_socket() first")
+        from .safety import validate
+
+        validate(self.spec)
         self._engine = EngineSession(self.spec.to_engine())
         try:
             fd = os.dup(self._sock.fileno())

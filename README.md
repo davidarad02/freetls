@@ -29,6 +29,13 @@ Highlights:
 The library makes **no external network calls** at runtime and never contacts
 third-party fingerprint services.
 
+> **Warning — unsafe by default.** `freetls` lets you offer arbitrary cipher
+> suites and extension IDs. By default it does **not** verify that the engine
+> can *complete* the suites you offer, so if a server selects an unbacked suite
+> the handshake fails. Turn on **safe mode** (`freetls.set_safe_mode(True)` or
+> `FingerprintSpec(safe=True)`) to reject any spec the engine cannot back. See
+> [Safe & unsafe mode](#safe--unsafe-mode).
+
 ---
 
 ## Table of contents
@@ -41,6 +48,8 @@ third-party fingerprint services.
   - [Profiles catalog](#profiles-catalog)
   - [Custom & registered profiles](#custom--registered-profiles)
   - [The spec model](#the-spec-model)
+- [Safe & unsafe mode](#safe--unsafe-mode)
+- [Wide cipher support (libcrypto)](#wide-cipher-support-libcrypto)
 - [HTTP/2](#http2)
 - [Certificate verification](#certificate-verification)
 - [Timeouts](#timeouts)
@@ -457,6 +466,66 @@ Specs also carry H2 fields (`h2_settings`, `h2_window_update`,
 `h2_pseudo_header_order`), preset fields (`preset`, `preset_no_sni`,
 `preset_alpn`), and `chlo_json` (a full ClientHelloSpec JSON document — see
 [Custom & registered profiles](#custom--registered-profiles)).
+
+---
+
+## Safe & unsafe mode
+
+`freetls` can offer **any** cipher suite or extension ID — that is the point.
+But the engine can only *complete* the suites it backs. By default `freetls`
+does **not** check this, so offering a suite the engine cannot finish makes the
+handshake fail (with `HandshakeError`) if a server selects it.
+
+**Safe mode** validates the *effective* ClientHello (after preset / `chlo_json`
+/ random expansion) against the engine's backed ciphers and an extension
+whitelist, and raises `SpecError` otherwise:
+
+```python
+import freetls
+
+freetls.set_safe_mode(True)                       # global default (off by default)
+spec = freetls.modes.baseline_spec(server_name="example.com", safe=True)  # per-spec
+spec = freetls.modes.safe_random(server_name="example.com")               # always safe
+```
+
+- **Whitelisted extensions**: SNI, ALPN, `supported_versions`,
+  `supported_groups`, `ec_point_formats`, `signature_algorithms`, `key_share`,
+  `psk_key_exchange_modes`, `extended_master_secret`, `renegotiation_info`,
+  `session_ticket`, `status_request`, SCT, `compress_certificate`, `padding`,
+  `application_settings` (ALPS), `pre_shared_key`, `record_size_limit`.
+- **GREASE is always exempt** (JA4 excludes it).
+- Modern **browser presets fail safe mode** (they carry GREASE-ECH and trust
+  anchors, and some unbacked ciphers); safe mode is for fully-backed
+  custom/simple configs. Of the 220-profile catalog, 75 pass with the default
+  engine.
+- For randomized workloads, use `modes.safe_random(...)` (or `safe=True` on
+  `partial_random`/`true_random`), which draws only from backed ciphers and the
+  whitelist.
+
+`FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
+The default is **unsafe**, for backward compatibility.
+
+## Wide cipher support (libcrypto)
+
+The default engine is Go-only: it completes the suites Go `crypto/tls`
+implements (plus uTLS's legacy ChaCha20), 27 in total. A second, **wide** engine
+links an OpenSSL `libcrypto` (EVP) backend and adds 24 suites — ARIA-GCM,
+AES-CCM / CCM_8, Camellia-CBC, and TLS 1.3 CCM — for **51** completable suites:
+
+```bash
+make libcrypto   # wide engine, dynamic system libcrypto (dev/test)
+make full        # wide engine, libcrypto linked STATICALLY from the OpenSSL submodule
+```
+
+`make full` builds `native/third_party/openssl` (a pinned OpenSSL 3.5.5 git
+submodule) as a static PIC `libcrypto.a`, links it into `libfreetls.so` with
+hidden symbols (`-Wl,-Bsymbolic -Wl,--exclude-libs,ALL`), and depends on no
+system `libcrypto`. `FREETLS_FULL=1 pip wheel .` bundles that engine so
+installed users need no build; a plain `git clone && pip install .` builds the
+Go-only engine and needs no OpenSSL.
+
+Offered suites can be inspected with `freetls.engine.supported_ciphers()`; the
+safe-mode extension whitelist with `freetls.engine.supported_extensions()`.
 
 ---
 
@@ -1041,5 +1110,11 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
   accept them; modern servers will refuse, as expected.
 - **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot
   produce more than ~2^48 distinct values per part.
+- **Cipher completion is bounded by the backend.** The default engine completes
+  only Go's suites (27). The wide engine (`make libcrypto` / `make full`) adds
+  ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM (51 total). DHE/DSS,
+  anonymous and PSK/SRP/GOST suites, and suites OpenSSL 3.5.5 does not
+  implement, are out of scope. TLS 1.3 CCM is implemented but no local
+  OpenSSL/Go server negotiates it (covered at the AEAD level).
 - Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
   system on those platforms; this checkout is exercised on Linux/CPython 3.14.

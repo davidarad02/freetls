@@ -12,6 +12,11 @@ Go is discovered in this order:
 
 Set ``FREETLS_SKIP_NATIVE=1`` to build without the engine (e.g. for docs); the
 resulting artifact will not perform TLS handshakes.
+
+Set ``FREETLS_FULL=1`` to bundle the wide Route B engine (libcrypto linked
+statically from ``native/third_party/openssl/libcrypto.a``, symbols hidden).
+This requires ``make full`` (or an equivalent OpenSSL static build) beforehand;
+without it, the default Go-only engine is bundled.
 """
 from __future__ import annotations
 
@@ -76,12 +81,45 @@ class build_py_with_go(build_py):
             env.setdefault("GOPATH", os.path.expanduser("~/go"))
             env["CGO_ENABLED"] = "1"
             env["PATH"] = os.path.dirname(go) + os.pathsep + env.get("PATH", "")
-            subprocess.run(
-                [go, "build", "-buildmode=c-shared", "-o", os.path.join(out_dir, lib), "."],
-                cwd=native,
-                check=True,
-                env=env,
-            )
+            out_lib = os.path.join(out_dir, lib)
+
+            if os.environ.get("FREETLS_FULL") == "1":
+                # Ship the wide engine: libcrypto linked statically from the
+                # OpenSSL submodule, symbols hidden. Requires `make full` to have
+                # built native/third_party/openssl/libcrypto.a.
+                openssl = os.path.join(native, "third_party", "openssl")
+                libcrypto = os.path.join(openssl, "libcrypto.a")
+                if not os.path.exists(libcrypto):
+                    raise RuntimeError(
+                        "FREETLS_FULL=1 but static OpenSSL is missing. Build it "
+                        f"first (`make full`); expected {libcrypto}."
+                    )
+                env["CGO_CFLAGS"] = f"-I{openssl}/include"
+                env["CGO_LDFLAGS"] = (
+                    f"{libcrypto} -ldl -pthread -Wl,-Bsymbolic -Wl,--exclude-libs,ALL"
+                )
+                subprocess.run(
+                    [
+                        go,
+                        "build",
+                        "-tags",
+                        "freetls_libcrypto freetls_static_openssl",
+                        "-buildmode=c-shared",
+                        "-o",
+                        out_lib,
+                        ".",
+                    ],
+                    cwd=native,
+                    check=True,
+                    env=env,
+                )
+            else:
+                subprocess.run(
+                    [go, "build", "-buildmode=c-shared", "-o", out_lib, "."],
+                    cwd=native,
+                    check=True,
+                    env=env,
+                )
         super().run()
 
 

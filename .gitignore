@@ -18,10 +18,23 @@ native/libfreetls.dylib
 native/libfreetls.h
 native/freetls.dll
 native/freetls.h
+# Route B wide engine (produced by `make libcrypto` / `make full`).
+native/libfreetls_libcrypto.so
+native/libfreetls_libcrypto.dylib
+native/libfreetls_libcrypto.h
 src/freetls/_lib/*.so
 src/freetls/_lib/*.dylib
 src/freetls/_lib/*.dll
 src/freetls/_lib/*.h
+
+# Go
+*.test
+*.prof
+coverage.out
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
 
 # Editor / OS
 .idea/

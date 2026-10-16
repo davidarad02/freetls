@@ -14,6 +14,9 @@ from ._cffi import (
     preset_list,
     preset_raw,
     preset_raw_opts,
+    spec_raw,
+    supported_ciphers,
+    supported_extensions,
     version,
 )
 
@@ -26,5 +29,8 @@ __all__ = [
     "preset_raw",
     "preset_raw_opts",
     "chlo_raw",
+    "spec_raw",
+    "supported_ciphers",
+    "supported_extensions",
     "active_sessions",
 ]

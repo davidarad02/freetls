@@ -20,6 +20,7 @@ from .model import (
     TLS13,
     Extension,
     FingerprintSpec,
+    get_safe_mode,
 )
 
 # A broad, Chrome-like cipher list that works against virtually all servers.
@@ -268,6 +269,36 @@ def _random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[i
     return picks
 
 
+# Optional extension kinds on the safe-mode whitelist that are safe to send
+# empty. Safe randomization draws from these instead of generic padding.
+_SAFE_OPTIONAL_EXT_KINDS = {
+    "sct": 0x0012,
+    "session_ticket": 0x0023,
+    "renegotiation_info": 0xFF01,
+    "status_request": 0x0005,
+}
+
+
+def _supported_cipher_pool() -> list[int]:
+    from .engine import supported_ciphers
+
+    return [c for c in supported_ciphers() if c not in (0x0000, 0x00FF, 0x5600)]
+
+
+def _safe_random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[int]:
+    pool = [c for c in _supported_cipher_pool() if c not in used]
+    return rng.sample(pool, min(n, len(pool)))
+
+
+def _safe_random_exts(rng: random.Random, n: int, used: set[int]) -> list[Extension]:
+    out: list[Extension] = []
+    pool = [k for k, eid in _SAFE_OPTIONAL_EXT_KINDS.items() if eid not in used]
+    for kind in rng.sample(pool, min(n, len(pool))):
+        used.add(_SAFE_OPTIONAL_EXT_KINDS[kind])
+        out.append(Extension(kind))
+    return out
+
+
 def partial_random(
     server_name: str | None = None,
     ciphers: Sequence[int | str] | None = None,
@@ -278,12 +309,22 @@ def partial_random(
     n_random_extensions: int = 8,
     seed: int | None = None,
     verify: bool | None = None,
+    safe: bool | None = None,
 ) -> FingerprintSpec:
-    """Partial-random mode: functional baseline + randomized padding."""
+    """Partial-random mode: functional baseline + randomized padding.
+
+    With ``safe`` (or global safe mode), ciphers are drawn from the engine's
+    supported set and extensions from the safe-mode whitelist instead of generic
+    padding, so the result passes safe-mode validation.
+    """
+    use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
     base = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_CIPHERS)]
     used_c = set(base)
-    base += _random_cipher_padding(rng, n_random_ciphers, used_c)
+    if use_safe:
+        base += _safe_random_cipher_padding(rng, n_random_ciphers, used_c)
+    else:
+        base += _random_cipher_padding(rng, n_random_ciphers, used_c)
 
     spec = baseline_spec(
         server_name=server_name,
@@ -294,7 +335,10 @@ def partial_random(
         verify=verify,
     )
     used_e = set(_FUNCTIONAL_EXT_IDS)
-    spec.extensions += _random_generic_exts(rng, n_random_extensions, used_e)
+    if use_safe:
+        spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
+    else:
+        spec.extensions += _random_generic_exts(rng, n_random_extensions, used_e)
     return spec
 
 
@@ -307,16 +351,23 @@ def true_random(
     n_extensions: int = 40,
     seed: int | None = None,
     verify: bool | None = None,
+    safe: bool | None = None,
 ) -> FingerprintSpec:
     """True-random mode: maximal random padding, minimal functional baseline.
 
     A small functional core (one working cipher + required extensions) is always
-    injected so the handshake can complete against a real server.
+    injected so the handshake can complete against a real server. With ``safe``
+    (or global safe mode), padding is drawn only from the engine's supported
+    ciphers and the safe-mode extension whitelist.
     """
+    use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
     core = [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F]
     used_c = set(core)
-    ciphers = core + _random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
+    if use_safe:
+        ciphers = core + _safe_random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
+    else:
+        ciphers = core + _random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
 
     spec = baseline_spec(
         server_name=server_name,
@@ -327,5 +378,34 @@ def true_random(
         verify=verify,
     )
     used_e = set(_FUNCTIONAL_EXT_IDS)
-    spec.extensions += _random_generic_exts(rng, n_extensions, used_e)
+    if use_safe:
+        spec.extensions += _safe_random_exts(rng, n_extensions, used_e)
+    else:
+        spec.extensions += _random_generic_exts(rng, n_extensions, used_e)
     return spec
+
+
+def safe_random(
+    server_name: str | None = None,
+    alpn: Sequence[str] = DEFAULT_ALPN,
+    vers_min: int = TLS12,
+    vers_max: int = TLS13,
+    n_ciphers: int = 12,
+    n_extensions: int = 3,
+    seed: int | None = None,
+    verify: bool | None = None,
+) -> FingerprintSpec:
+    """Safe randomization: a functional baseline plus a random subset of the
+    engine's supported ciphers and the safe-mode extension whitelist. Always
+    passes safe-mode validation."""
+    return partial_random(
+        server_name=server_name,
+        alpn=alpn,
+        vers_min=vers_min,
+        vers_max=vers_max,
+        n_random_ciphers=n_ciphers,
+        n_random_extensions=n_extensions,
+        seed=seed,
+        verify=verify,
+        safe=True,
+    )

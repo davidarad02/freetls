@@ -38,6 +38,9 @@ char *freetls_chlo_raw(const char *);
 char *freetls_aux_error(void);
 char *freetls_preset_list(void);
 char *freetls_h2_request(long long, const char *);
+char *freetls_supported_ciphers(void);
+char *freetls_supported_extensions(void);
+char *freetls_spec_raw(const char *);
 """
 
 _LIB_NAMES = {
@@ -177,7 +180,7 @@ def _load():
     return ffi, lib
 
 
-_EXPECTED_ABI = 1
+_EXPECTED_ABI = 2
 
 
 def abi_version() -> int:
@@ -247,6 +250,32 @@ def chlo_raw(chlo_json: str) -> bytes:
         reason = _cstr(lib.freetls_aux_error()) or "invalid ClientHelloSpec JSON"
         raise SpecError(f"chlo_json: {reason}")
     return bytes.fromhex(s)
+
+
+def spec_raw(spec: dict) -> bytes:
+    """Build a ClientHello offline from an engine spec JSON (offline).
+
+    Returns the raw handshake message bytes, or raises ``SpecError`` if the
+    spec is invalid/unsupported. No network is used.
+    """
+    ffi, lib = _load()
+    s = _cstr(lib.freetls_spec_raw(json.dumps(spec).encode()))
+    if not s:
+        reason = _cstr(lib.freetls_aux_error()) or "invalid spec"
+        raise SpecError(f"spec: {reason}")
+    return bytes.fromhex(s)
+
+
+def supported_ciphers() -> list:
+    """Cipher-suite IDs this engine can complete (native union libcrypto)."""
+    ffi, lib = _load()
+    return json.loads(_cstr(lib.freetls_supported_ciphers()) or "[]")
+
+
+def supported_extensions() -> list:
+    """Extension type IDs accepted by safe mode (the engine's whitelist)."""
+    ffi, lib = _load()
+    return json.loads(_cstr(lib.freetls_supported_extensions()) or "[]")
 
 
 @dataclass

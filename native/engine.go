@@ -550,7 +550,7 @@ func freetls_version() *C.char {
 
 // ABI version of the C surface. Bump when an export's signature/semantics
 // changes incompatibly; the Python binding refuses to load on a major mismatch.
-const abiVersion = 1
+const abiVersion = 2
 
 //export freetls_abi_version
 func freetls_abi_version() C.int {
@@ -680,6 +680,94 @@ func freetls_preset_list() (out *C.char) {
 	sort.Strings(names)
 	b, _ := json.Marshal(names)
 	return C.CString(string(b))
+}
+
+// freetls_supported_ciphers returns a JSON array of the cipher-suite IDs this
+// engine can complete (Go-native union any libcrypto-added suites).
+//
+//export freetls_supported_ciphers
+func freetls_supported_ciphers() (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = C.CString("[]")
+		}
+	}()
+	b, err := json.Marshal(utls.FreetlsSupportedCipherSuiteIDs())
+	if err != nil {
+		return C.CString("[]")
+	}
+	return C.CString(string(b))
+}
+
+// safeExtensionIDs is the whitelist of extension types safe mode accepts: the
+// extension kinds the engine implements and whose semantics it can honour.
+var safeExtensionIDs = []uint16{
+	0x0000, // server_name
+	0x0005, // status_request (OCSP)
+	0x000a, // supported_groups
+	0x000b, // ec_point_formats
+	0x000d, // signature_algorithms
+	0x0010, // alpn
+	0x0012, // signed_certificate_timestamp (SCT)
+	0x0015, // padding
+	0x0017, // extended_master_secret
+	0x001b, // compress_certificate
+	0x001c, // record_size_limit
+	0x0023, // session_ticket
+	0x0029, // pre_shared_key
+	0x002b, // supported_versions
+	0x002d, // psk_key_exchange_modes
+	0x0033, // key_share
+	0x4469, // application_settings (ALPS)
+	0x44cd, // application_settings (ALPS, alternate codepoint)
+	0xff01, // renegotiation_info
+}
+
+// freetls_supported_extensions returns the safe-mode extension whitelist as a
+// JSON array of extension type IDs.
+//
+//export freetls_supported_extensions
+func freetls_supported_extensions() (out *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = C.CString("[]")
+		}
+	}()
+	b, err := json.Marshal(safeExtensionIDs)
+	if err != nil {
+		return C.CString("[]")
+	}
+	return C.CString(string(b))
+}
+
+// freetls_spec_raw builds the ClientHello for an engine spec offline (no
+// network) and returns the raw handshake message as hex (empty on error). It is
+// used by the safe-mode validator to inspect the effective hello.
+//
+//export freetls_spec_raw
+func freetls_spec_raw(specJSON *C.char) (out *C.char) {
+	auxErr = ""
+	defer func() {
+		if r := recover(); r != nil {
+			auxErr = fmt.Sprintf("invalid spec: %v", r)
+			out = C.CString("")
+		}
+	}()
+	_, chs, _, err := parseSpec(C.GoString(specJSON))
+	if err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	uconn := utls.UClient(dummyConn{}, &utls.Config{ServerName: "example.com"}, utls.HelloCustom)
+	if err := uconn.ApplyPreset(chs); err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	if err := uconn.MarshalClientHello(); err != nil {
+		auxErr = err.Error()
+		return C.CString("")
+	}
+	return hexOf(uconn.HandshakeState.Hello.Raw)
 }
 
 func mustJSON(v any) string {

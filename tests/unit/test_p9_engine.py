@@ -7,13 +7,14 @@ import random
 import pytest
 
 from freetls import engine
+from freetls.engine._cffi import _EXPECTED_ABI
 from freetls.errors import EngineError, SpecError
 from freetls.fingerprint import ja4_from_bytes, parse_client_hello
 from freetls.fingerprint.ja4h import ja4h
 
 
 def test_abi_version_matches_binding():
-    assert engine.abi_version() == 1
+    assert engine.abi_version() == _EXPECTED_ABI
     assert engine.version().startswith("freetls/")
 
 

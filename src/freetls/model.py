@@ -35,6 +35,22 @@ def get_default_verify() -> bool:
     return DEFAULT_VERIFY
 
 
+# Library-wide default for safe mode. Unsafe by default (backward compatible);
+# safe mode rejects specs whose effective ClientHello the engine cannot back.
+DEFAULT_SAFE = False
+
+
+def set_safe_mode(value: bool) -> None:
+    """Set the default safe mode used when a spec leaves ``safe`` unset."""
+    global DEFAULT_SAFE
+    DEFAULT_SAFE = bool(value)
+
+
+def get_safe_mode() -> bool:
+    """Return the current default safe mode."""
+    return DEFAULT_SAFE
+
+
 _KNOWN_KINDS = {
     "sni",
     "alpn",
@@ -204,6 +220,8 @@ class FingerprintSpec:
     server_name: str | None = None
     # None => use the library default (secure: True). See set_default_verify().
     verify: bool | None = None
+    # None => use the library default (unsafe). See set_safe_mode().
+    safe: bool | None = None
     root_ca: str | None = None
     timeout_ms: int = 30000
 
@@ -313,6 +331,7 @@ class FingerprintSpec:
             vers_max=self.vers_max,
             server_name=self.server_name,
             verify=self.verify,
+            safe=self.safe,
             root_ca=self.root_ca,
             timeout_ms=self.timeout_ms,
             check_hostname=self.check_hostname,

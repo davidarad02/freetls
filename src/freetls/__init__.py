@@ -35,7 +35,9 @@ from .model import (
     Extension,
     FingerprintSpec,
     get_default_verify,
+    get_safe_mode,
     set_default_verify,
+    set_safe_mode,
 )
 from .session import TLSSession
 
@@ -48,6 +50,8 @@ __all__ = [
     "Extension",
     "set_default_verify",
     "get_default_verify",
+    "set_safe_mode",
+    "get_safe_mode",
     "Cipher",
     "ExtensionType",
     "SignatureScheme",
