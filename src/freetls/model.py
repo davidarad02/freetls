@@ -225,6 +225,10 @@ class FingerprintSpec:
     # Permit anonymous (ADH) cipher suites, which provide no server
     # authentication. Off by default.
     anonymous: bool = False
+    # TLS 1.2 PSK credentials (RFC 4279). ``psk`` is hex-encoded. Both must be
+    # set to use the PSK/ECDHE-PSK/DHE-PSK/RSA-PSK cipher suites.
+    psk_identity: str | None = None
+    psk: str | None = None
     root_ca: str | None = None
     timeout_ms: int = 30000
 
@@ -276,6 +280,8 @@ class FingerprintSpec:
             "server_name": self.server_name or "",
             "verify": self.verify,
             "anonymous": self.anonymous,
+            "psk_identity": self.psk_identity or "",
+            "psk": self.psk or "",
             "root_ca": self.root_ca or "",
             "timeout_ms": self.timeout_ms,
             "extensions": [e.to_engine() for e in self.extensions],
@@ -337,6 +343,8 @@ class FingerprintSpec:
             verify=self.verify,
             safe=self.safe,
             anonymous=self.anonymous,
+            psk_identity=self.psk_identity,
+            psk=self.psk,
             root_ca=self.root_ca,
             timeout_ms=self.timeout_ms,
             check_hostname=self.check_hostname,

@@ -675,14 +675,12 @@ func (hs *clientHandshakeState) pickCipherSuite() error {
 func (hs *clientHandshakeState) doFullHandshake() error {
 	c := hs.c
 
-	// freetls: DHE key agreements carry an authentication mode; the anonymous
-	// (ADH) variant has no server Certificate, so skip it below.
+	// freetls: anonymous DH (ADH), PSK and SRP cipher suites send no server
+	// Certificate, so skip it below. Anonymous suites additionally require the
+	// explicit opt-in Config.Anonymous.
 	keyAgreement := hs.suite.ka(c.vers)
-	anonSuite := false
-	if dh, ok := keyAgreement.(*dhKeyAgreement); ok && dh.auth == dhAuthAnon {
-		anonSuite = true
-	}
-	if anonSuite && !c.config.Anonymous {
+	certless := certlessKA(keyAgreement)
+	if isAnonymousKA(keyAgreement) && !c.config.Anonymous {
 		c.sendAlert(alertHandshakeFailure)
 		return errors.New("tls: anonymous cipher suite requires Config.Anonymous")
 	}
@@ -694,7 +692,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		return err
 	}
 
-	if !anonSuite {
+	if !certless {
 		cm, ok := msg.(*certificateMsg)
 		if !ok || len(cm.certificates) == 0 {
 			c.sendAlert(alertUnexpectedMessage)
@@ -750,7 +748,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	}
 
 	var peerCert *x509.Certificate
-	if !anonSuite {
+	if !certless {
 		peerCert = c.peerCertificates[0]
 	}
 
@@ -761,9 +759,11 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 			c.sendAlert(alertIllegalParameter)
 			return err
 		}
-		if keyAgreement, ok := keyAgreement.(*ecdheKeyAgreement); ok {
-			c.curveID = keyAgreement.curveID
-			c.peerSigAlg = keyAgreement.signatureAlgorithm
+		if ecdhe, ok := keyAgreement.(*ecdheKeyAgreement); ok {
+			c.curveID = ecdhe.curveID
+			c.peerSigAlg = ecdhe.signatureAlgorithm
+		} else if ecdhePSK, ok := keyAgreement.(*ecdhePSKKeyAgreement); ok {
+			c.curveID = ecdhePSK.curveID
 		}
 
 		msg, err = c.readHandshake(&hs.finishedHash)

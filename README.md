@@ -545,8 +545,8 @@ Switch engines at runtime (no restart) with the string-free API:
 
 ```python
 import freetls
-freetls.use_engine(freetls.Engine.GO)      # 27 suites
-freetls.use_engine(freetls.Engine.WIDE)    # 51 suites (default)
+freetls.use_engine(freetls.Engine.GO)      # 72 suites
+freetls.use_engine(freetls.Engine.WIDE)    # 138 suites (default)
 with freetls.engine_context(freetls.Engine.GO):   # scoped, restored on exit
     ...
 print(freetls.current_engine())            # EngineInfo(kind, path)
@@ -730,6 +730,22 @@ session.getpeercert(binary_form=True)   # leaf DER bytes
 session.getpeercert()                   # dict (subject/issuer/SAN/…) via cryptography
 session.peer_chain()                    # list[DER], leaf first
 ```
+
+### Pre-shared keys (PSK) and anonymous suites
+
+The TLS 1.2 PSK family (RFC 4279/5487/5489) is supported by setting both PSK
+credential fields on the spec. ``psk`` is hex-encoded. Offer a PSK cipher suite
+(see ``freetls.engine.supported_ciphers()``) alongside the credentials:
+
+```python
+spec = modes.specific(ciphers=[0x00A8], vers_min=0x0303, vers_max=0x0303)
+spec.psk_identity = "client-id"
+spec.psk = "0102030405060708090a0b0c0d0e0f10"   # hex
+```
+
+Pure PSK / DHE-PSK / ECDHE-PSK / RSA-PSK suites are supported. Anonymous (ADH)
+suites provide no server authentication and are off by default; opt in with
+``spec.anonymous = True``.
 
 ---
 
@@ -1159,10 +1175,11 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
 - **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot
   produce more than ~2^48 distinct values per part.
 - **Cipher completion is bounded by the backend.** The default (wide) engine
-  completes 51 suites; the Go-only alternate completes 27. The wide engine adds
-  ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM. DHE/DSS, anonymous and
-  PSK/SRP/GOST suites, and suites OpenSSL 3.5.5 does not implement, are out of
-  scope. TLS 1.3 CCM is implemented but no local OpenSSL/Go server negotiates it
-  (covered at the AEAD level).
+  completes 138 suites; the Go-only alternate completes 72. The wide engine adds
+  ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM. Finite-field DHE
+  (DHE-RSA/DHE-DSS/ADH) and the TLS 1.2 PSK family (PSK/ECDHE-PSK/DHE-PSK/
+  RSA-PSK) are implemented in the forked uTLS engine. SRP, GOST and suites
+  OpenSSL 3.5.5 does not implement are out of scope. TLS 1.3 CCM is implemented
+  but no local OpenSSL/Go server negotiates it (covered at the AEAD level).
 - Cross-platform wheel artifacts (macOS/Windows) are produced by the same build
   system on those platforms; this checkout is exercised on Linux/CPython 3.14.

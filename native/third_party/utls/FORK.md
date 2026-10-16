@@ -29,6 +29,10 @@ file (see below). Both are rebasable (see `tools/rebase_utls.sh`).
 | `ffdhe_ciphers.go` | DHE-RSA/DHE-DSS suite registration (Go-native ciphers) *(P1)* |
 | `ffdhe_ciphers_evp.go` | DHE suites backed by the EVP bridge (ARIA-GCM/AES-CCM/Camellia-CBC) *(P1)* |
 | `ffdhe_freetls_test.go` | Go tests for the FFDHE key agreement *(P1)* |
+| `psk_key_agreement.go` | `pskKeyAgreement`: pure PSK / DHE-PSK / ECDHE-PSK / RSA-PSK client key exchange *(P2)* |
+| `psk_ciphers.go` | PSK suite registration (Go-native AES-GCM/CBC/ChaCha) *(P2)* |
+| `psk_ciphers_evp.go` | PSK suites backed by the EVP bridge (ARIA-GCM/AES-CCM/Camellia-CBC) *(P2)* |
+| `psk_freetls_test.go` | Go tests for the PSK premaster/CKE *(P2)* |
 
 `FORK.md` is also ours.
 
@@ -38,9 +42,10 @@ A few behaviours cannot be added from a new file, so `patches/freetls.patch`
 edits upstream files; `tools/rebase_utls.sh` re-applies it after each re-copy:
 
 - `handshake_client.go`: allow `*dsa.PublicKey` server certificates (DHE-DSS);
-  skip the Certificate message + `verifyServerCertificate` for anonymous (ADH)
-  suites and gate them behind `Config.Anonymous`.
-- `common.go`: add `Config.Anonymous`.
+  skip the Certificate message + `verifyServerCertificate` for certless suites
+  (anonymous ADH, PSK, SRP) and gate anonymous suites behind
+  `Config.Anonymous`.
+- `common.go`: add `Config.Anonymous`, `Config.PskIdentity` and `Config.Psk`.
 
 ## Registration rules (do not break these)
 

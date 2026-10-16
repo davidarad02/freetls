@@ -73,6 +73,10 @@ type specJSON struct {
 	ServerName string `json:"server_name,omitempty"`
 	// Anonymous permits anonymous (ADH) cipher suites (no server auth).
 	Anonymous bool `json:"anonymous,omitempty"`
+	// PskIdentity/Psk enable the TLS 1.2 PSK cipher suites (RFC 4279). Psk is
+	// hex-encoded.
+	PskIdentity string `json:"psk_identity,omitempty"`
+	Psk         string `json:"psk,omitempty"`
 
 	// Certificate suite options.
 	CheckHostname *bool    `json:"check_hostname,omitempty"` // default true
@@ -370,6 +374,16 @@ func parseSpec(js string) (*specJSON, *utls.ClientHelloSpec, *utls.Config, error
 	}
 
 	cfg := &utls.Config{ServerName: s.ServerName, Anonymous: s.Anonymous}
+	if s.PskIdentity != "" || s.Psk != "" {
+		cfg.PskIdentity = s.PskIdentity
+		if s.Psk != "" {
+			psk, err := hex.DecodeString(s.Psk)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("freetls: invalid psk hex: %w", err)
+			}
+			cfg.Psk = psk
+		}
+	}
 	// With HelloCustom uTLS refuses to handshake if resumption is enabled but
 	// no ticket/PSK extension is present. This lets a spec opt out cleanly.
 	cfg.PreferSkipResumptionOnNilExtension = true

@@ -750,6 +750,11 @@ type Config struct {
 	// no server authentication. freetls addition; default false.
 	Anonymous bool
 
+	// PskIdentity and Psk enable the TLS 1.2 PSK cipher suites (RFC 4279/5487/
+	// 5489). Both must be set. freetls addition.
+	PskIdentity string
+	Psk         []byte
+
 	// InsecureSkipTimeVerify controls whether a client verifies the server's
 	// certificate chain against time. If InsecureSkipTimeVerify is true,
 	// crypto/tls accepts the certificate even when it is expired.
