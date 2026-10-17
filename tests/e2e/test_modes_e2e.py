@@ -12,6 +12,19 @@ def _connect(spec, port):
     return s
 
 
+def test_random_modes_complete_against_go(go_server):
+    """Regression: unsafe random padding must not break Go's crypto/tls.
+
+    The padding pool used to include four extensions whose empty encoding Go
+    rejects, so ~80% of unsafe-mode handshakes failed against a Go server.
+    """
+    for seed in range(40):
+        for fn in (modes.partial_random, modes.true_random, modes.safe_random):
+            spec = fn(server_name="localhost", verify=False, seed=seed)
+            with _connect(spec, go_server.port) as s:
+                assert s.ja4 is not None
+
+
 def test_specific_mode_exact_ciphers(tls_server_13):
     ciphers = [0x1301, 0x1302, 0x1303]
     spec = modes.specific(ciphers=ciphers, server_name="localhost")

@@ -106,6 +106,41 @@ def test_safe_padding_excludes_known_unsafe():
         assert unsafe not in modes.SAFE_PADDING_EXT_IDS
 
 
+def test_padding_pool_is_server_validated():
+    """The pool excludes every empty encoding a reference server rejects.
+
+    OpenSSL rejects the first six empty; Go's crypto/tls additionally rejects
+    the next four as malformed. 0x0023 (session_ticket) is accepted everywhere.
+    """
+    for eid in (0x0001, 0x000E, 0x001B, 0x0029, 0x002F, 0x0032):
+        assert eid not in modes.SAFE_PADDING_EXT_IDS
+    for eid in (0x002A, 0x002C, 0x0039, 0xFF01):
+        assert eid not in modes.SAFE_PADDING_EXT_IDS
+    assert 0x0023 in modes.SAFE_PADDING_EXT_IDS
+
+
+def test_random_modes_never_emit_go_hostile_exts():
+    hostile = {0x002A, 0x002C, 0x0039, 0xFF01}
+    for seed in range(60):
+        for fn in (modes.partial_random, modes.true_random, modes.safe_random):
+            spec = fn(server_name="x", seed=seed)
+            ids = {e.id for e in spec.extensions if e.kind == "generic"}
+            assert not (ids & hostile)
+
+
+def test_padding_does_not_duplicate_session_ticket():
+    """The padding draw must not add a second 0x0023 if one is already present."""
+    from freetls import Extension
+
+    spec = modes.baseline_spec(server_name="x")
+    assert 0x0023 not in modes._used_ext_ids(spec, modes._FUNCTIONAL_EXT_IDS)
+    spec.extensions.append(Extension("session_ticket"))
+    assert 0x0023 in modes._used_ext_ids(spec, modes._FUNCTIONAL_EXT_IDS)
+    generic = modes.baseline_spec(server_name="x")
+    generic.extensions.append(Extension.generic(0x23, ""))
+    assert 0x0023 in modes._used_ext_ids(generic, modes._FUNCTIONAL_EXT_IDS)
+
+
 def test_random_counts_vary_per_seed():
     """The JA4_a count fields must vary, not be frozen at a constant.
 

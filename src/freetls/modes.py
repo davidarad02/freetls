@@ -77,11 +77,17 @@ _FUNCTIONAL_EXT_IDS = {
     0x0005,  # status_request
 }
 
-# Assigned extension IDs that a server will safely ignore when sent with empty
-# data (empirically verified against an OpenSSL 3.5 server). The six assigned
-# extensions that provoke an alert with empty data (0x0001, 0x000e, 0x001b,
-# 0x0029, 0x002f, 0x0032) are deliberately excluded, so random modes keep an
-# assigned-only universe AND complete real handshakes.
+# Assigned extension IDs a server will safely ignore when sent with empty data,
+# validated against every server stack the test-suite uses (OpenSSL s_server,
+# Python ssl and Go net/http). Two groups are excluded, so random modes keep an
+# assigned-only universe AND complete real handshakes against all of them:
+#   - the six that provoke an OpenSSL alert with empty data
+#     (0x0001, 0x000e, 0x001b, 0x0029, 0x002f, 0x0032);
+#   - the four whose *empty* encoding Go's crypto/tls rejects as malformed
+#     (0x002a early_data, 0x002c cookie, 0x0039 quic_transport_parameters,
+#     0xff01 renegotiation_info).
+# 0x0023 (session_ticket) is included: an empty session_ticket is valid on the
+# wire and accepted by all three stacks.
 SAFE_PADDING_EXT_IDS = [
     0x0002,
     0x0003,
@@ -108,12 +114,11 @@ SAFE_PADDING_EXT_IDS = [
     0x0020,
     0x0021,
     0x0022,
+    0x0023,
     0x0024,
     0x0025,
     0x0026,
     0x0027,
-    0x002A,
-    0x002C,
     0x0030,
     0x0031,
     0x0034,
@@ -121,7 +126,6 @@ SAFE_PADDING_EXT_IDS = [
     0x0036,
     0x0037,
     0x0038,
-    0x0039,
     0x003A,
     0x003B,
     0x003C,
@@ -129,7 +133,6 @@ SAFE_PADDING_EXT_IDS = [
     0x003E,
     0xFD00,
     0xFE0D,
-    0xFF01,
 ]
 
 
@@ -268,6 +271,21 @@ def _random_generic_exts(rng: random.Random, n: int, used: set[int]) -> list[Ext
     return out
 
 
+def _used_ext_ids(spec: FingerprintSpec, base: set[int]) -> set[int]:
+    """Extension IDs already present in ``spec`` so padding never duplicates one.
+
+    The random modes build from ``baseline_spec``, but a caller-supplied
+    ``session_ticket`` (resumption) must not be shadowed by a generic 0x0023.
+    """
+    used = set(base)
+    if any(
+        e.kind == "session_ticket" or (e.kind == "generic" and e.id == 0x0023)
+        for e in spec.extensions
+    ):
+        used.add(0x0023)
+    return used
+
+
 def _random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[int]:
     pool = [c for c in _CIPHER_POOL if c not in used]
     picks = rng.sample(pool, min(n, len(pool)))
@@ -376,7 +394,7 @@ def partial_random(
     if n_random_extensions is None:
         pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_random_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
-    used_e = set(_FUNCTIONAL_EXT_IDS)
+    used_e = _used_ext_ids(spec, _FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
     else:
@@ -428,7 +446,7 @@ def true_random(
     if n_extensions is None:
         pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
-    used_e = set(_FUNCTIONAL_EXT_IDS)
+    used_e = _used_ext_ids(spec, _FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_extensions, used_e)
     else:
@@ -629,7 +647,7 @@ def quic_partial_random(
     if n_random_extensions is None:
         pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_random_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
-    used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
+    used_e = _used_ext_ids(spec, _QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
     else:
@@ -671,7 +689,7 @@ def quic_true_random(
     if n_extensions is None:
         pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
-    used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
+    used_e = _used_ext_ids(spec, _QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_extensions, used_e)
     else:

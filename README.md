@@ -536,7 +536,7 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   sets are drawn uniformly, which saturates the 48-bit `JA4_b`/`JA4_c` hashes.
   The reachable space is bounded structurally: `JA4_b`/`JA4_c` are 48-bit, and in
   safe mode only five padding extensions are engine-backed, so safe `JA4_c` is
-  capped at 2⁵ — the unsafe modes (47 padding extensions) reach ~2⁴⁷. On the
+  capped at 2⁵ — the unsafe modes (44 padding extensions) reach ~2⁴⁴. On the
   Go-only engine the cipher pool is smaller and the space shrinks accordingly.
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
