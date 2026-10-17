@@ -1188,7 +1188,10 @@ The selectable universe is **assigned IANA values only**: **356 cipher suites,
 64 extensions, 49 signature schemes, 59 named groups** (regenerate with
 `tools/gen_tables.py`). These are exposed as the `Cipher`, `ExtensionType`,
 `SignatureScheme`, and `NamedGroup` enums (see
-[Named constants](#named-constants-no-hex-needed)). `JA4_b` and `JA4_c` are
+[Named constants](#named-constants-no-hex-needed)). Safe mode intersects the
+engine's backed ciphers with that registry, so its pool is **142** on the wide
+engine (the 144 backed suites include the two non-assigned ChaCha20 drafts
+`0xcc13`/`0xcc14`) and **76** on the Go-only engine. `JA4_b` and `JA4_c` are
 12-hex truncated SHA-256, so each hash is capped at **2^48 (~2.8×10^14)** — but
 `JA4_a` also encodes the cipher and extension *counts*, and the random modes draw
 those counts, so the same hash under a different count is a *different* JA4. A

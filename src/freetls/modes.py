@@ -296,9 +296,13 @@ def _random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[i
 
 # Typed (well-formed) encodings for the padding IDs the engine has a dedicated
 # extension for; every other pool ID is emitted as empty generic padding.
+# NOTE: 0x0015 (padding) is deliberately *not* typed. uTLS's BoringPaddingStyle
+# only emits it when the unpadded ClientHello is 256..512 bytes, so a typed
+# padding silently vanishes outside that window and breaks the spec == wire
+# contract (ja4_from_spec != the emitted JA4). Empty generic padding is
+# unconditional.
 _SAFE_TYPED_EXT: dict[int, Callable[[], Extension]] = {
     0x0012: lambda: Extension("sct"),
-    0x0015: lambda: Extension.padding(),
     0x001C: lambda: Extension.record_size_limit(16385),
     0x0023: lambda: Extension("session_ticket"),
     0xFF01: lambda: Extension("renegotiation_info"),
@@ -363,9 +367,16 @@ def _safe_ext_count() -> int:
 
 
 def _supported_cipher_pool() -> list[int]:
+    """Backed ciphers intersected with the assigned IANA universe.
+
+    ``engine.supported_ciphers()`` also backs the two old ChaCha20-Poly1305
+    *draft* suites (0xcc13/0xcc14), which are not in the assigned registry; the
+    JA4 value universe is assigned-only, so they are filtered out here.
+    """
     from .engine import supported_ciphers
 
-    return [c for c in supported_ciphers() if c not in (0x0000, 0x00FF, 0x5600)]
+    assigned = set(_U["ciphers"])
+    return [c for c in supported_ciphers() if c in assigned and c not in (0x0000, 0x00FF, 0x5600)]
 
 
 def _safe_random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[int]:

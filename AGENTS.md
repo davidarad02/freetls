@@ -239,6 +239,9 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   pool (OpenSSL + Go + Python ssl + a live BoringSSL front end); `_safe_ext_pool()`
   is the safe-mode variant (plus well-formed `renegotiation_info`), which
   `safety.validate()` accepts alongside `engine.supported_extensions()`.
+  `_supported_cipher_pool()` is the engine's backed ciphers intersected with the
+  assigned IANA registry (142 wide / 76 Go-only, not 144/78 — the engine also
+  backs the non-assigned ChaCha20 drafts `0xcc13`/`0xcc14`).
 - `tools/ja4_universe.py` — estimates the distinct-JA4 space and birthday
   statistics for any mode/engine (and verifies them with `--empirical`). Its
   model is coupled to `modes.py`; see gotcha 5.

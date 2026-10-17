@@ -298,16 +298,18 @@ stronger.)*
 engine, i.e. near the 2^48 cipher-hash cap.)
 
 **Current numbers** (`tools/ja4_universe.py`, after the count draws, the
-server-validated padding pool and the sigalg draw; wide = 144 backed ciphers,
-Go-only = 78). Each hash part is `sum_k min(C(pool,k), 2^48)` because `JA4_a`
-encodes the drawn count:
+server-validated padding pool and the sigalg draw; the safe cipher pool is the
+assigned-only intersection — 142 of the wide engine's 144 backed suites and 76
+of the Go-only engine's 78, since 0xcc13/0xcc14 are non-assigned ChaCha drafts).
+Each hash part is `sum_k min(C(pool,k), 2^48)` because `JA4_a` encodes the drawn
+count:
 
 | mode | cipher-hash (b) | ext-hash (c) | total S | n₅₀ | P(collision @10k) |
 |---|---|---|---|---|---|
 | unsafe `partial_random` | 2.177e16 | 5.498e11 | 1.197e28 | 1.288e14 | ~0 |
 | unsafe `true_random` | 2.461e16 | 5.498e11 | 1.353e28 | 1.370e14 | ~0 |
-| safe `safe_random` (wide) | 2.110e16 | 1.100e12 | 2.320e28 | 1.793e14 | ~0 |
-| safe `safe_random` (Go-only) | 9.354e15 | 1.100e12 | 1.028e28 | 1.194e14 | ~0 |
+| safe `safe_random` (wide) | 2.106e16 | 1.100e12 | 2.315e28 | 1.792e14 | ~0 |
+| safe `safe_random` (Go-only) | 8.491e15 | 1.100e12 | 9.336e27 | 1.138e14 | ~0 |
 
 **Not lost in safe mode:** GREASE control, padding, ALPS, cert compression,
 record_size_limit, OCSP/SCT, resumption/PSK, PQ groups, extension order control,

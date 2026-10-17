@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import freetls
 from freetls import modes
 from freetls.fingerprint import ja4_from_spec
@@ -32,3 +34,19 @@ def test_partial_random_spec_matches_engine(tls_server_13):
     )
     a, b, c = _check(spec, tls_server_13.port)
     assert a == b == c
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda s: modes.safe_random(server_name="localhost", verify=False, seed=s),
+        lambda s: modes.partial_random(server_name="localhost", verify=False, seed=s, safe=True),
+        lambda s: modes.true_random(server_name="localhost", verify=False, seed=s, safe=True),
+    ],
+    ids=["safe_random", "partial_safe", "true_safe"],
+)
+def test_safe_random_modes_spec_matches_engine(tls_server_13, factory):
+    """Default (drawn) counts + the widened safe pool must still match on the wire."""
+    for seed in range(6):
+        a, b, c = _check(factory(seed), tls_server_13.port)
+        assert a == b == c, seed

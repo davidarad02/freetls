@@ -87,10 +87,53 @@ def test_random_modes_use_assigned_values_only():
     for spec in (
         modes.partial_random(seed=5),
         modes.true_random(seed=5, n_ciphers=100, n_extensions=40),
+        modes.partial_random(seed=5, safe=True),
+        modes.true_random(seed=5, safe=True),
+        modes.safe_random(seed=5),
     ):
         assert set(spec.ciphers) <= allowed_c
         generic = [e.id for e in spec.extensions if e.kind == "generic"]
         assert set(generic) <= allowed_e
+
+
+def test_safe_cipher_pool_is_assigned_only():
+    """The engine backs two non-assigned ChaCha draft suites; they must not leak.
+
+    ``engine.supported_ciphers()`` includes 0xcc13/0xcc14 (the old ChaCha20
+    drafts), which are absent from the assigned IANA registry. The JA4 universe
+    is assigned-only, so the safe cipher pool intersects with it.
+    """
+    from freetls import engine
+
+    assigned = set(tables.universe()["ciphers"])
+    backed = set(engine.supported_ciphers())
+    assert backed - assigned, "expected the engine to back some non-assigned ciphers"
+    assert set(modes._supported_cipher_pool()) <= assigned
+
+
+def test_random_modes_spec_matches_emitted_hello():
+    """The engine must emit exactly what the spec asks for (offline).
+
+    Regression: 0x0015 used to be a *typed* Boring-style padding in the safe
+    pool, but uTLS only emits it for a 256..512-byte ClientHello, so the wire
+    sometimes had one extension fewer than the spec (ja4_from_spec != the JA4 of
+    the emitted bytes).
+    """
+    from freetls import engine
+    from freetls.fingerprint import ja4_from_bytes, ja4_from_spec
+
+    factories = (
+        lambda s: modes.safe_random(server_name="x", seed=s),
+        lambda s: modes.partial_random(server_name="x", seed=s, safe=True),
+        lambda s: modes.true_random(server_name="x", seed=s, safe=True),
+        lambda s: modes.partial_random(server_name="x", seed=s),
+        lambda s: modes.true_random(server_name="x", seed=s),
+    )
+    for fn in factories:
+        for seed in range(40):
+            spec = fn(seed)
+            raw = engine.spec_raw(spec.to_engine())
+            assert ja4_from_bytes(raw)["ja4"] == ja4_from_spec(spec)["ja4"], (fn, seed)
 
 
 def test_true_random_keeps_functional_core():
