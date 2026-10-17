@@ -286,24 +286,28 @@ _SAFE_OPTIONAL_EXT_KINDS: dict[str, tuple[int, Callable[[], Extension]]] = {
 }
 
 
-def _adaptive_random_count(available: int) -> int:
-    """Draw size that maximises the number of distinct subsets.
+def _random_padding_count(rng: random.Random, available: int, base_len: int) -> int:
+    """Draw a padding count that maximises the reachable JA4 space.
 
-    ``C(n, k)`` is largest near ``k = n/2``, so half the pool yields the most
-    distinct sets (and hence JA4_b / JA4_c values). Drawing the *whole* pool
-    would be deterministic (one set)."""
-    return max(1, available // 2)
+    ``JA4_a`` encodes the offered cipher/extension counts as a two-digit field
+    (``min(len, 99)`` in ``ja4.py``). Fixing the count — e.g. always half the
+    pool — collapses that field to a *single* value, which is a deterministic
+    tell; drawing it uniformly over the whole feasible range makes every count a
+    distinct ``JA4_a``, and the number of distinct JA4 values is the product of
+    the reachable counts and the set hashes. The set itself is drawn uniformly,
+    which saturates the 48-bit ``JA4_b`` / ``JA4_c`` hashes (``C(n, k)`` exceeds
+    2^48 at ``k ≈ 8``, so the pool size is irrelevant beyond that).
+
+    The range is clamped so the total count stays under 100 and never saturates
+    the two-digit field (a saturated count would collapse the diversity again).
+    """
+    hi = min(available, max(0, 99 - base_len))
+    return rng.randint(0, hi) if hi > 0 else 0
 
 
 def _free_safe_ext_count() -> int:
     """Number of safe-mode whitelist extensions not already in the baseline."""
     return sum(1 for eid, _ in _SAFE_OPTIONAL_EXT_KINDS.values() if eid not in _FUNCTIONAL_EXT_IDS)
-
-
-# Default number of random generic extensions for the *unsafe* random modes.
-# Half the padding pool maximises C(47, k); the old defaults (8 / 40) were far
-# from optimal (C(47,8) and C(47,40)=C(47,7)).
-_UNSAFE_RANDOM_EXT_COUNT = _adaptive_random_count(len(SAFE_PADDING_EXT_IDS))
 
 
 def _supported_cipher_pool() -> list[int]:
@@ -341,24 +345,21 @@ def partial_random(
 ) -> FingerprintSpec:
     """Partial-random mode: functional baseline + randomized padding.
 
-    ``n_random_ciphers`` / ``n_random_extensions`` default to 10 / 23 (half the
-    padding pool, which maximises the number of distinct extension sets). With
-    ``safe`` (or global safe mode) the cipher count defaults to *half of the
-    engine's backed pool* and the extension count to a random subset of the
-    whitelist's free extensions, and ciphers/extensions are drawn only from the
-    backed set + whitelist, so the result passes safe-mode validation.
+    ``n_random_ciphers`` / ``n_random_extensions`` default to a uniform draw over
+    the whole feasible range, so the ``JA4_a`` cipher/extension *counts* vary per
+    call (fixing them freezes that field) and the number of distinct JA4 values is
+    maximised. With ``safe`` (or global safe mode) ciphers/extensions are drawn
+    only from the engine's backed set and the whitelist, so the result passes
+    safe-mode validation.
     """
     use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
     base = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_CIPHERS)]
     used_c = set(base)
+    pool_c = _supported_cipher_pool() if use_safe else _CIPHER_POOL
     if n_random_ciphers is None:
-        if use_safe:
-            pool = _supported_cipher_pool()
-            available = sum(1 for c in pool if c not in used_c)
-            n_random_ciphers = _adaptive_random_count(available)
-        else:
-            n_random_ciphers = 10
+        available = sum(1 for c in pool_c if c not in used_c)
+        n_random_ciphers = _random_padding_count(rng, available, len(base))
     if use_safe:
         base += _safe_random_cipher_padding(rng, n_random_ciphers, used_c)
     else:
@@ -373,10 +374,8 @@ def partial_random(
         verify=verify,
     )
     if n_random_extensions is None:
-        if use_safe:
-            n_random_extensions = rng.randint(0, _free_safe_ext_count())
-        else:
-            n_random_extensions = _UNSAFE_RANDOM_EXT_COUNT
+        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        n_random_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
     used_e = set(_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
@@ -400,23 +399,19 @@ def true_random(
 
     A small functional core (one working cipher + required extensions) is always
     injected so the handshake can complete against a real server. ``n_ciphers`` /
-    ``n_extensions`` default to 60 / 23 (half the padding pool, which maximises
-    the number of distinct extension sets). With ``safe`` (or global safe mode)
-    the total cipher count defaults to the core plus *half of the backed pool* (so
-    it varies instead of saturating), and padding is drawn only from the engine's
-    supported ciphers and the safe-mode extension whitelist.
+    ``n_extensions`` default to a uniform draw over the whole feasible range, so
+    the ``JA4_a`` counts vary per call and the number of distinct JA4 values is
+    maximised. With ``safe`` (or global safe mode) padding is drawn only from the
+    engine's supported ciphers and the safe-mode extension whitelist.
     """
     use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
     core = [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F]
     used_c = set(core)
+    pool_c = _supported_cipher_pool() if use_safe else _CIPHER_POOL
     if n_ciphers is None:
-        if use_safe:
-            pool = _supported_cipher_pool()
-            available = sum(1 for c in pool if c not in used_c)
-            n_ciphers = len(core) + _adaptive_random_count(available)
-        else:
-            n_ciphers = 60
+        available = sum(1 for c in pool_c if c not in used_c)
+        n_ciphers = len(core) + _random_padding_count(rng, available, len(core))
     if use_safe:
         ciphers = core + _safe_random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
     else:
@@ -431,10 +426,8 @@ def true_random(
         verify=verify,
     )
     if n_extensions is None:
-        if use_safe:
-            n_extensions = rng.randint(0, _free_safe_ext_count())
-        else:
-            n_extensions = _UNSAFE_RANDOM_EXT_COUNT
+        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        n_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
     used_e = set(_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_extensions, used_e)
@@ -457,10 +450,10 @@ def safe_random(
     engine's supported ciphers and the safe-mode extension whitelist. Always
     passes safe-mode validation.
 
-    ``n_ciphers`` / ``n_extensions`` default to half of the engine's backed pool
-    and to the whitelist's free extensions, which maximises the number of
-    distinct JA4 values. Pass explicit counts to offer more (browser-like) or
-    fewer ciphers."""
+    ``n_ciphers`` / ``n_extensions`` default to a uniform draw over the whole
+    feasible range, so the ``JA4_a`` counts vary per call (a fixed count is a
+    deterministic tell) and the number of distinct JA4 values is maximised. Pass
+    explicit counts to pin them."""
     return partial_random(
         server_name=server_name,
         alpn=alpn,
@@ -620,11 +613,8 @@ def quic_partial_random(
     base = [as_cipher(c) for c in (ciphers if ciphers is not None else DEFAULT_QUIC_CIPHERS)]
     used_c = set(base)
     if n_random_ciphers is None:
-        if use_safe:
-            available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
-            n_random_ciphers = _adaptive_random_count(available)
-        else:
-            n_random_ciphers = 2
+        available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
+        n_random_ciphers = _random_padding_count(rng, available, len(base))
     base += _quic_random_cipher_padding(rng, n_random_ciphers, used_c)
 
     spec = quic_baseline_spec(
@@ -637,10 +627,8 @@ def quic_partial_random(
         verify=verify,
     )
     if n_random_extensions is None:
-        if use_safe:
-            n_random_extensions = rng.randint(0, _free_safe_ext_count())
-        else:
-            n_random_extensions = _UNSAFE_RANDOM_EXT_COUNT
+        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        n_random_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
     used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_random_extensions, used_e)
@@ -667,11 +655,8 @@ def quic_true_random(
     core = [0x1301]
     used_c = set(core)
     if n_ciphers is None:
-        if use_safe:
-            available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
-            n_ciphers = len(core) + _adaptive_random_count(available)
-        else:
-            n_ciphers = len(_quic_cipher_pool())
+        available = sum(1 for c in _quic_cipher_pool() if c not in used_c)
+        n_ciphers = len(core) + _random_padding_count(rng, available, len(core))
     ciphers = core + _quic_random_cipher_padding(rng, max(0, n_ciphers - len(core)), used_c)
 
     spec = quic_baseline_spec(
@@ -684,10 +669,8 @@ def quic_true_random(
         verify=verify,
     )
     if n_extensions is None:
-        if use_safe:
-            n_extensions = rng.randint(0, _free_safe_ext_count())
-        else:
-            n_extensions = _UNSAFE_RANDOM_EXT_COUNT
+        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        n_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
     used_e = set(_QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:
         spec.extensions += _safe_random_exts(rng, n_extensions, used_e)

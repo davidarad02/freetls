@@ -106,12 +106,36 @@ def test_safe_padding_excludes_known_unsafe():
         assert unsafe not in modes.SAFE_PADDING_EXT_IDS
 
 
-def test_unsafe_random_extension_default_is_half_the_pool():
-    # Half the padding pool maximises C(47, k); the old 8/40 defaults did not.
-    expected = len(modes.SAFE_PADDING_EXT_IDS) // 2
-    for spec in (modes.partial_random(seed=1), modes.true_random(seed=1)):
-        generic = [e for e in spec.extensions if e.kind == "generic"]
-        assert len(generic) == expected
+def test_random_counts_vary_per_seed():
+    """The JA4_a count fields must vary, not be frozen at a constant.
+
+    Regression: the cipher count used to be a fixed function of the pool size
+    (``⌊available/2⌋``), so every session emitted the same ``ja4_a`` count — a
+    deterministic tell that also collapsed the reachable JA4 space.
+    """
+    from freetls.fingerprint import ja4_from_spec
+
+    for fn in (
+        lambda s: modes.partial_random(server_name="x", seed=s),
+        lambda s: modes.true_random(server_name="x", seed=s),
+        lambda s: modes.safe_random(server_name="x", seed=s),
+    ):
+        ciphers, exts = set(), set()
+        for s in range(80):
+            a = ja4_from_spec(fn(s))["ja4_a"]
+            ciphers.add(int(a[4:6]))
+            exts.add(int(a[6:8]))
+        assert len(ciphers) > 5, ciphers
+        assert len(exts) > 3, exts
+        # The two-digit count field must not saturate (that would re-freeze it).
+        assert max(ciphers) < 100 and max(exts) < 100
+
+
+def test_unsafe_random_extension_count_within_pool():
+    for s in range(30):
+        for spec in (modes.partial_random(seed=s), modes.true_random(seed=s)):
+            generic = [e for e in spec.extensions if e.kind == "generic"]
+            assert 0 <= len(generic) <= len(modes.SAFE_PADDING_EXT_IDS)
 
 
 def test_safe_random_modes_are_diverse():

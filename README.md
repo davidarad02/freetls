@@ -530,11 +530,14 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   custom/simple configs. Of the 220-profile catalog, 75 pass with the default
   engine.
 - For randomized workloads, use `modes.safe_random(...)` (or `safe=True` on
-  `partial_random`/`true_random`). The safe defaults are **adaptive**: ciphers
-  are drawn from about half the engine's backed pool (which maximises the number
-  of distinct JA4 values) and extensions from a random subset of the whitelist's
-  free extensions. On the wide engine this yields ~10⁹–10¹³ distinct safe JA4s;
-  on the Go-only engine it is necessarily smaller (~10³–10⁶).
+  `partial_random`/`true_random`). The defaults are **adaptive**: the cipher and
+  extension *counts* are drawn uniformly over the whole feasible range, so the
+  `JA4_a` count fields vary per call (fixing them freezes that field), and the
+  sets are drawn uniformly, which saturates the 48-bit `JA4_b`/`JA4_c` hashes.
+  The reachable space is bounded structurally: `JA4_b`/`JA4_c` are 48-bit, and in
+  safe mode only five padding extensions are engine-backed, so safe `JA4_c` is
+  capped at 2⁵ — the unsafe modes (47 padding extensions) reach ~2⁴⁷. On the
+  Go-only engine the cipher pool is smaller and the space shrinks accordingly.
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
 The default is **unsafe**, for backward compatibility.
@@ -1004,10 +1007,9 @@ default_quic_transport_parameters() -> list[TransportParameter]
 ```
 
 Leaving `n_random_ciphers`/`n_random_extensions` (and `n_ciphers`/`n_extensions`)
-unset uses the mode defaults: the random *extension* count is half the padding
-pool (23, which maximises the number of distinct JA4 values), while the random
-*cipher* count is 10 (`partial_random`) / 60 (`true_random`) in unsafe mode and
-half of the engine's backed pool under safe mode.
+unset draws each count uniformly over the whole feasible range (clamped so the
+two-digit `JA4_a` count field never saturates), which maximises the number of
+distinct JA4 values: the counts vary per call and the sets are drawn uniformly.
 
 ### `profiles`
 

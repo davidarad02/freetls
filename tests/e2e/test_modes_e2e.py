@@ -21,11 +21,22 @@ def test_specific_mode_exact_ciphers(tls_server_13):
 
 
 def test_partial_random_mode(tls_server_13):
-    spec = modes.partial_random(server_name="localhost", seed=11)
+    spec = modes.partial_random(
+        server_name="localhost", seed=11, n_random_ciphers=10, n_random_extensions=8
+    )
     with _connect(spec, tls_server_13.port) as s:
         assert s.ja4.startswith("t13")
         # baseline + 10 padding ciphers
         assert len(s.fingerprints["ciphers"]) == len(modes.DEFAULT_CIPHERS) + 10
+
+
+def test_partial_random_default_count_is_drawn(tls_server_13):
+    # The default padding count is drawn, so the total stays within the
+    # non-saturating range (baseline .. 99).
+    spec = modes.partial_random(server_name="localhost", seed=11)
+    with _connect(spec, tls_server_13.port) as s:
+        n = len(s.fingerprints["ciphers"])
+        assert len(modes.DEFAULT_CIPHERS) <= n <= 99
 
 
 def test_true_random_mode(tls_server_13):

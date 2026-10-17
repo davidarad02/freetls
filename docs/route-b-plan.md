@@ -246,14 +246,15 @@ fail safe mode. Safe mode therefore requires a **new "safe randomization"**:
 draw ciphers from `supported_ciphers` and extensions from the whitelist. This is
 new functionality, added as part of this work.
 
-The safe defaults are **adaptive**: the cipher count defaults to about half the
-backed pool (which maximises `C(n, k)`, and hence the number of distinct
-`JA4_b` values — drawing the whole pool would be deterministic), and the
-extension count defaults to a random subset of the whitelist's free extensions.
-The unsafe extension default was also corrected from 8 / 40 to `⌊47/2⌋ = 23`
-(the `C(47, k)` maximum). Measured distinct JA4s over 800 seeds: safe
-`partial_random`/`safe_random` 785 (was 66/1) and `true_random` 800 (was 1) on
-the Go-only engine; 800 on the wide engine.
+The safe defaults are **adaptive**: the cipher and extension counts are drawn
+uniformly over the whole feasible range (clamped so the two-digit `JA4_a` count
+field never saturates), and the sets are drawn uniformly. Fixing the count — as
+an earlier `⌊n/2⌋` heuristic did — collapses `JA4_a` to a single value and is a
+deterministic tell; the uniform draw makes every count reachable, which
+multiplies the number of distinct JA4 values (the set hashes are already
+saturated: `C(n, k) > 2^48` at `k ≈ 8`). Measured distinct JA4s over 800 seeds:
+safe `partial_random`/`safe_random` 785 (was 66/1) and `true_random` 800 (was 1)
+on the Go-only engine; 800 on the wide engine.
 
 ### 6.5 What safe mode loses (measured)
 At plan time: **75 / 220 profiles pass; 145 fail** (50 unsupported ciphers;
