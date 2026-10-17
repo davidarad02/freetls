@@ -536,11 +536,11 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   `partial_random`/`true_random`). The defaults are **adaptive**: the cipher and
   extension *counts* are drawn uniformly over the whole feasible range, the sets
   are drawn uniformly, and the `signature_algorithms` list gets a random draw on
-  top of the mandatory core. The reachable space is bounded structurally:
-  `JA4_b`/`JA4_c` are 48-bit hashes; safe mode draws padding from the
-  server-validated pool and the unsafe modes from the assigned padding pool
-  (~2³⁹–2⁴⁰). On the Go-only engine the cipher pool is smaller and the space
-  shrinks accordingly.
+  top of the mandatory core. Safe mode draws padding from the server-validated
+  pool (~2⁴⁰) and the unsafe modes from the assigned padding pool (~2³⁹); with
+  the count field that puts a random mode at ~2^93–2^94 distinct JA4s
+  (`python tools/ja4_universe.py`). On the Go-only engine the cipher pool is
+  smaller and the space shrinks accordingly.
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
 The default is **unsafe**, for backward compatibility.
@@ -1189,11 +1189,14 @@ The selectable universe is **assigned IANA values only**: **356 cipher suites,
 `tools/gen_tables.py`). These are exposed as the `Cipher`, `ExtensionType`,
 `SignatureScheme`, and `NamedGroup` enums (see
 [Named constants](#named-constants-no-hex-needed)). `JA4_b` and `JA4_c` are
-12-hex truncated SHA-256, so the
-number of *distinct* JA4 values is capped at **2^48 per part (~2.8×10^14)**, and
-about **2^96 (~7.9×10^28)** with a fixed header. The raw input space (subsets and
-orderings of ciphers/extensions/sigalgs) is far larger — the hash truncation,
-not the universe, is the binding limit.
+12-hex truncated SHA-256, so each hash is capped at **2^48 (~2.8×10^14)** — but
+`JA4_a` also encodes the cipher and extension *counts*, and the random modes draw
+those counts, so the same hash under a different count is a *different* JA4. A
+random mode's space is therefore `sum_k min(C(pool, k), 2^48)` per part, and the
+wide engine's random modes reach **~2^93–2^94 distinct JA4 values** (the Go-only
+engine is a little smaller). `tools/ja4_universe.py` reports the current numbers
+for any mode/engine, and `--empirical` verifies them by sampling. The raw input
+space (subsets and orderings of ciphers/extensions/sigalgs) is larger still.
 
 ---
 
@@ -1254,6 +1257,7 @@ make test        # full suite (unit + conformance + e2e + pcap)
 make test-fast   # skip privileged pcap capture
 make coverage    # enforce the 85% coverage gate
 make gen         # regenerate IANA tables + preset map + profile catalog
+python tools/ja4_universe.py --engine wide --mode safe_random --safe   # distinct-JA4 space
 make setup-caps  # one-time: make a local tcpdump capable of loopback capture
 make build       # build sdist + wheel into dist/
 make fmt         # format with black + ruff --fix
@@ -1347,8 +1351,11 @@ Set verification on the spec: `spec.verify = True` and `spec.root_ca = ...`
   JA4D/JA4D6 and JA4N are not implemented.
 - **No SSLv3.** TLS 1.0/1.1 handshakes only complete against servers that still
   accept them; modern servers will refuse, as expected.
-- **JA4 collisions are bounded by the 12-hex truncation**; random modes cannot
-  produce more than ~2^48 distinct values per part.
+- **JA4 collisions are bounded by the 12-hex hash truncation.** Each hash part is
+  capped at ~2^48, and the varying `JA4_a` counts multiply that, so a random mode
+  reaches ~2^93–2^94 distinct JA4s — see
+  [Value universe and range](#value-universe-and-range) and
+  `tools/ja4_universe.py`.
 - **Cipher completion is bounded by the backend.** The default (wide) engine
   completes 144 suites; the Go-only alternate completes 78. The wide engine adds
   ARIA-GCM, AES-CCM/CCM_8, Camellia-CBC and TLS 1.3 CCM. Finite-field DHE

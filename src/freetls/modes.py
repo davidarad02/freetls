@@ -315,6 +315,15 @@ def _safe_ext_pool() -> list[int]:
     return sorted(set(SAFE_PADDING_EXT_IDS) | set(_SAFE_TYPED_EXT))
 
 
+def _padding_count_hi(available: int, base_len: int) -> int:
+    """Upper bound of the random padding draw (see :func:`_random_padding_count`).
+
+    Exposed so ``tools/ja4_universe.py`` can compute the reachable space without
+    duplicating the two-digit clamp.
+    """
+    return min(available, max(0, 99 - base_len))
+
+
 def _random_padding_count(rng: random.Random, available: int, base_len: int) -> int:
     """Draw a padding count that maximises the reachable JA4 space.
 
@@ -330,7 +339,7 @@ def _random_padding_count(rng: random.Random, available: int, base_len: int) -> 
     The range is clamped so the total count stays under 100 and never saturates
     the two-digit field (a saturated count would collapse the diversity again).
     """
-    hi = min(available, max(0, 99 - base_len))
+    hi = _padding_count_hi(available, base_len)
     return rng.randint(0, hi) if hi > 0 else 0
 
 

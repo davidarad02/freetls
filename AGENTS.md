@@ -177,6 +177,16 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
    `tool/gen_catalog.py` deliberately **excludes nondeterministic presets**
    (Chrome shufflers whose GREASE-dependent padding changes the JA4), so a
    profile missing from the catalog is expected, not a bug.
+5. **Keep the universe tool in step.** `tools/ja4_universe.py` is coupled to
+   `modes.py` (`SAFE_PADDING_EXT_IDS`, `_safe_ext_pool`, `_padding_count_hi`,
+   `DEFAULT_CIPHERS`, the QUIC pools). **Whenever a change effectively changes
+   the universe options** — the padding pools, the cipher/extension count draws,
+   or the sigalg draw — re-run the tool for the affected modes and update the
+   numbers quoted in `README.md` ("Value universe and range", the safe-mode
+   bullet) and `docs/route-b-plan.md` §6. Its model: because `JA4_a` encodes the
+   drawn count, a random mode's space per side is `sum_k min(C(pool, k), 2^48)`
+   — not a single `C(pool, k)`, and not capped at `2^48` overall. Run it with
+   `--list-pools` to sanity-check the pool sizes it reads.
 
 ## HARD CONSTRAINTS
 
@@ -229,6 +239,9 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
   pool (OpenSSL + Go + Python ssl + a live BoringSSL front end); `_safe_ext_pool()`
   is the safe-mode variant (plus well-formed `renegotiation_info`), which
   `safety.validate()` accepts alongside `engine.supported_extensions()`.
+- `tools/ja4_universe.py` — estimates the distinct-JA4 space and birthday
+  statistics for any mode/engine (and verifies them with `--empirical`). Its
+  model is coupled to `modes.py`; see gotcha 5.
 - `src/freetls/session.py` — `TLSSession` (socket-like; `ja4`/`ja3`/`ja4s`,
   `h2_request`). `src/freetls/quic.py` — `QUICSession` (UDP; `ja4q`/`ja4q_r`/
   `ja4sq`, `request`, datagram helpers). `src/freetls/context.py` — `TLSContext`

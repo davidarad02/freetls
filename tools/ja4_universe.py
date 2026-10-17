@@ -6,9 +6,17 @@ size, this computes the theoretical space of distinct JA4 values and the
 birthday statistics (n50, collision probability, expected distinct), and can
 verify them empirically by sampling specs and hashing them.
 
-JA4 = ``a_b_c`` where ``b`` (cipher hash) and ``c`` (extension hash) are each 12
-hex chars, i.e. capped at 2**48. This tool models ``S = b_space * c_space``
-(the two hashes are independent), matching the numbers reported for Route B.
+JA4 = ``a_b_c``: ``a`` encodes the counts, while ``b``/``c`` are 12-hex hashes
+(48 bits each). The random modes *draw* their cipher/extension counts over
+``0..hi``, and because a different count is a different ``a``, each side's space
+is ``sum_k min(C(pool, k), 2**48)`` — not a single ``C(pool, k)`` and not capped
+at ``2**48`` overall. ``S = b_space * c_space`` is the number of distinct JA4
+values.
+
+Keep this in step with ``src/freetls/modes.py``: whenever the padding pools, the
+count draws or the sigalg draw change, re-run it and update the numbers quoted in
+README.md / docs/route-b-plan.md. See AGENTS.md ("Keep the universe tool in
+step").
 
 Examples
 --------
@@ -126,74 +134,78 @@ def resolve_safe(args: argparse.Namespace) -> bool:
     return bool(args.safe)
 
 
+def _subset_space(pool: int, hi: int) -> int:
+    """Distinct JA4 hashes reachable over every drawable count ``0..hi``.
+
+    Each count ``k`` renders a distinct two-digit ``JA4_a`` field, so hashes for
+    different ``k`` never collide; within one ``k`` the 12-hex hash is capped at
+    ``CAP``. The space is therefore ``sum_k min(C(pool, k), CAP)`` — larger than
+    ``CAP`` once several counts saturate their hash, which is exactly the gain
+    from drawing the count instead of fixing it.
+    """
+    total = 0
+    for k in range(min(hi, pool) + 1):
+        total += min(comb(pool, k), CAP)
+    return total
+
+
 def cipher_space(
     mode: str, pool: int, safe: bool, args: argparse.Namespace
-) -> tuple[int, int, int]:
-    """Return (space, fixed_count, random_count)."""
+) -> tuple[int, int, int, bool]:
+    """Return (space, fixed_count, max_random_count, count_is_drawn)."""
+    from freetls import modes
+
     if mode == "baseline":
-        return 1, pool, 0
+        return 1, pool, 0, False
     if mode == "specific":
         k = args.n_ciphers
         if k is None:
-            return min(2**pool - 1, CAP), 0, pool
+            return _subset_space(pool, pool), 0, pool, True
         k = max(0, min(k, pool))
-        return min(comb(pool, k), CAP), 0, k
+        return min(comb(pool, k), CAP), 0, k, False
 
     if mode in ("partial_random", "safe_random"):
-        base = args.base
-        if base is None:
-            from freetls import modes
-
-            base = len(modes.DEFAULT_CIPHERS)
+        base = args.base if args.base is not None else len(modes.DEFAULT_CIPHERS)
+        avail = max(0, pool - base)
         n = args.n_random_ciphers
         if n is None:
-            if safe:
-                from freetls import modes
-
-                n = modes._adaptive_random_count(max(0, pool - base))
-            else:
-                n = 10
-        avail = max(0, pool - base)
-        return min(comb(avail, min(n, avail)), CAP), base, n
+            hi = modes._padding_count_hi(avail, base)
+            return _subset_space(avail, hi), base, hi, True
+        n = max(0, min(n, avail))
+        return min(comb(avail, n), CAP), base, n, False
 
     # true_random
     core = args.core if args.core is not None else 5
+    avail = max(0, pool - core)
     total = args.n_ciphers
     if total is None:
-        if safe:
-            from freetls import modes
-
-            total = core + modes._adaptive_random_count(max(0, pool - core))
-        else:
-            total = 60
-    n = max(0, total - core)
-    avail = max(0, pool - core)
-    return min(comb(avail, min(n, avail)), CAP), core, n
+        hi = modes._padding_count_hi(avail, core)
+        return _subset_space(avail, hi), core, hi, True
+    n = max(0, min(total - core, avail))
+    return min(comb(avail, n), CAP), core, n, False
 
 
 def extension_space(
     mode: str, ext_pool: int, safe: bool, args: argparse.Namespace
-) -> tuple[int, int | None]:
-    """Return (space, random_count_or_None_for_random_subset)."""
+) -> tuple[int, int, bool]:
+    """Return (space, max_random_count, count_is_drawn)."""
+    from freetls import modes
+
     if mode == "baseline":
-        return 1, 0
+        return 1, 0, False
     if mode == "specific":
         k = args.n_extensions
         if k is None:
-            return min(2**ext_pool - 1, CAP), None
+            return _subset_space(ext_pool, ext_pool), ext_pool, True
         k = max(0, min(k, ext_pool))
-        return min(comb(ext_pool, k), CAP), k
+        return min(comb(ext_pool, k), CAP), k, False
 
     n = args.n_random_extensions if mode in ("partial_random", "safe_random") else args.n_extensions
     if n is None:
-        if safe:
-            # safe default is a random subset of the free extensions: 0..ext_pool
-            return min(2**ext_pool, CAP), None
-        from freetls import modes
-
-        n = modes._UNSAFE_RANDOM_EXT_COUNT
+        hi = modes._padding_count_hi(ext_pool, len(modes._FUNCTIONAL_EXT_IDS))
+        return _subset_space(ext_pool, hi), hi, True
     n = max(0, min(n, ext_pool))
-    return min(comb(ext_pool, n), CAP), n
+    return min(comb(ext_pool, n), CAP), n, False
 
 
 def build_factory(args: argparse.Namespace, safe: bool) -> Callable[[int], Any]:
@@ -224,16 +236,24 @@ def build_factory(args: argparse.Namespace, safe: bool) -> Callable[[int], Any]:
             seed=seed, safe=safe, n_ciphers=args.n_ciphers, n_extensions=args.n_extensions, **kw
         )
 
-    # specific: seeded random cipher subset (+ optional seeded extension subset)
+    # specific: seeded random cipher subset + seeded random extension subset
     from freetls import engine
 
     pool = list(engine.supported_ciphers()) if safe else list(modes._CIPHER_POOL)
     k = args.n_ciphers if args.n_ciphers is not None else min(20, len(pool))
+    epool = modes._safe_ext_pool() if safe else list(modes.SAFE_PADDING_EXT_IDS)
 
     def factory(seed: int) -> Any:
+        from freetls.model import Extension
+
         rng = random.Random(seed)
-        ciphers = rng.sample(pool, min(k, len(pool)))
-        return modes.specific(ciphers=ciphers, **kw)
+        kk = k if args.n_ciphers is not None else rng.randint(0, len(pool))
+        ciphers = rng.sample(pool, min(kk, len(pool)))
+        spec = modes.specific(ciphers=ciphers, **kw)
+        ek = args.n_extensions if args.n_extensions is not None else rng.randint(0, len(epool))
+        for eid in rng.sample(epool, min(ek, len(epool))):
+            spec.extensions.append(Extension.generic(eid, ""))
+        return spec
 
     return factory
 
@@ -261,8 +281,8 @@ def main() -> int:
     if safe:
         pool = len(modes._supported_cipher_pool())
         pool_kind = "backed"
-        ext_pool = modes._free_safe_ext_count()
-        ext_kind = "free safe whitelist"
+        ext_pool = modes._safe_ext_count()
+        ext_kind = "server-validated padding"
     else:
         pool = len(modes._CIPHER_POOL)
         pool_kind = "assigned IANA"
@@ -274,15 +294,17 @@ def main() -> int:
             f"engine: {engine.abi_version()} (ABI), {len(engine.supported_ciphers())} backed ciphers"
         )
         print(
-            f"unsafe cipher pool: {len(modes._CIPHER_POOL)}   safe cipher pool: {len(modes._supported_cipher_pool())}"
+            f"unsafe cipher pool: {len(modes._CIPHER_POOL)}   "
+            f"safe cipher pool: {len(modes._supported_cipher_pool())}"
         )
         print(
-            f"unsafe extension pool: {len(modes.SAFE_PADDING_EXT_IDS)}   safe free extensions: {modes._free_safe_ext_count()}"
+            f"unsafe extension pool: {len(modes.SAFE_PADDING_EXT_IDS)}   "
+            f"safe extension pool: {modes._safe_ext_count()}"
         )
         return 0
 
-    b_space, fixed, n_ciphers = cipher_space(args.mode, pool, safe, args)
-    c_space, n_ext = extension_space(args.mode, ext_pool, safe, args)
+    b_space, fixed, n_ciphers, c_drawn = cipher_space(args.mode, pool, safe, args)
+    c_space, n_ext, e_drawn = extension_space(args.mode, ext_pool, safe, args)
     S = b_space * c_space
     n = args.workers
     n50 = 1.1774 * math.sqrt(S) if S else 0.0
@@ -297,11 +319,12 @@ def main() -> int:
         "cipher_pool": pool,
         "cipher_pool_kind": pool_kind,
         "fixed_ciphers": fixed,
-        "random_ciphers": n_ciphers,
-        "offered_ciphers": fixed + n_ciphers,
+        "max_random_ciphers": n_ciphers,
+        "max_offered_ciphers": fixed + n_ciphers,
+        "count_is_drawn": bool(c_drawn or e_drawn),
         "extension_pool": ext_pool,
         "extension_pool_kind": ext_kind,
-        "random_extensions": n_ext,
+        "max_random_extensions": n_ext,
         "ja4_b_space": b_space,
         "ja4_c_space": c_space,
         "total_space": S,
@@ -336,31 +359,43 @@ def main() -> int:
     if args.mode == "baseline":
         b_desc = "1 (fixed hello)"
     elif args.mode == "specific":
-        b_desc = f"C({pool},{n_ciphers})" if args.n_ciphers is not None else f"2^{pool}-1"
+        b_desc = (
+            f"C({pool},{n_ciphers})"
+            if args.n_ciphers is not None
+            else f"sum_k min(C({pool},k), 2^48)"
+        )
+    elif c_drawn:
+        b_desc = f"sum_k min(C({pool - fixed},k), 2^48), k = 0..{n_ciphers}"
     else:
         b_desc = f"C({pool - fixed},{n_ciphers})"
 
     if args.mode == "baseline":
         c_desc = "1 (fixed hello)"
     elif args.mode == "specific":
-        c_desc = f"C({ext_pool},{n_ext})" if n_ext is not None else f"2^{ext_pool}-1"
-    elif safe:
-        c_desc = f"2^{ext_pool} (any subset of the free whitelisted extensions)"
+        c_desc = (
+            f"C({ext_pool},{n_ext})"
+            if args.n_extensions is not None
+            else f"sum_k min(C({ext_pool},k), 2^48)"
+        )
+    elif e_drawn:
+        c_desc = f"sum_k min(C({ext_pool},k), 2^48), k = 0..{n_ext}"
     else:
         c_desc = f"C({ext_pool},{n_ext})"
 
     pct = p_collision * 100
     pct_str = "0%" if pct == 0 else f"{pct:.4g}%"
-    ext_shown = "random subset" if n_ext is None else str(n_ext)
+    ciphers_shown = (
+        f"{fixed} fixed + 0..{n_ciphers} drawn = {fixed}..{fixed + n_ciphers} offered"
+        if c_drawn
+        else f"{fixed} fixed + {n_ciphers} random = {fixed + n_ciphers} offered"
+    )
+    ext_shown = f"0..{n_ext} drawn (of {ext_pool})" if e_drawn else str(n_ext)
 
     print(
         f"engine      : ABI {engine.abi_version()}, {len(engine.supported_ciphers())} backed ciphers"
     )
     print(f"mode        : {args.mode}  ({'safe' if safe else 'unsafe'} mode)")
-    print(
-        f"ciphers     : pool {pool} ({pool_kind}); {fixed} fixed + {n_ciphers} random "
-        f"= {fixed + n_ciphers} offered"
-    )
+    print(f"ciphers     : pool {pool} ({pool_kind}); {ciphers_shown}")
     print(f"extensions  : pool {ext_pool} ({ext_kind}); {ext_shown}")
     print(f"JA4_b space : {fmt(b_space):>24}   = {b_desc}")
     print(f"JA4_c space : {fmt(c_space):>24}   = {c_desc}")
@@ -382,14 +417,16 @@ def main() -> int:
             "----------------\n"
             "JA4 = a_b_c.  'a' encodes the TLS version, SNI presence, cipher count,\n"
             "extension count and ALPN.  'b' is a 12-hex hash of the (sorted) cipher\n"
-            "list; 'c' is a 12-hex hash of the extension list.  'b' and 'c' each top\n"
-            "out at 2^48 values, so the largest possible JA4 space is 2^96.\n"
+            "list; 'c' is a 12-hex hash of the extension list.  Each hash is capped at\n"
+            "2^48, but because 'a' carries the counts, the same hash under a different\n"
+            "count is a different JA4: the random modes draw their count over 0..hi, so\n"
+            "their space is sum_k min(C(pool,k), 2^48), not a single C(pool,k).\n"
             "\n"
-            "- JA4_b space : distinct cipher sets this mode can emit (capped at 2^48).\n"
-            "- JA4_c space : distinct extension sets it can emit (capped at 2^48).\n"
-            "  In safe mode this is 2^(free whitelisted extensions); the free set is\n"
-            f"  small, so it is {2 ** modes._free_safe_ext_count()} - it does not depend on "
-            "the cipher pool or engine.\n"
+            "- JA4_b space : distinct (cipher count, cipher hash) pairs.\n"
+            "- JA4_c space : distinct (extension count, extension hash) pairs.\n"
+            "  Safe mode draws from the server-validated padding pool, the unsafe modes\n"
+            "  from the full assigned padding pool; the pool sizes do not depend on the\n"
+            "  cipher pool or engine.\n"
             "- total S     : b_space x c_space = the number of distinct JA4s available.\n"
             "  Bigger S means fewer collisions.\n"
             "- n50         : the fleet size at which a collision is as likely as not\n"
@@ -398,9 +435,14 @@ def main() -> int:
             "  JA4 (1 - exp(-N(N-1)/(2S))), shown as a percentage.\n"
             "- E[distinct] : expected number of distinct JA4s among the N workers.\n"
             "\n"
-            "Rule of thumb: keep P(collision) below ~1%; if it is higher, increase the\n"
-            "cipher variety (wide engine, more random ciphers, or 'specific' mode) -\n"
-            "the cipher hash is the dominant lever in safe mode."
+            "Caveat: P(collision) assumes the JA4s are drawn uniformly from S. The\n"
+            "random modes draw the *count* uniformly and then the set, so the\n"
+            "small-count corner (C(pool,k) << 2^48) collides more than the formula\n"
+            "suggests - use --empirical to measure it.\n"
+            "\n"
+            "Rule of thumb: keep P(collision) below ~1%. In safe mode the extension\n"
+            "pool is the binding lever (the cipher hash saturates after a handful of\n"
+            "ciphers), so widening `SAFE_PADDING_EXT_IDS` widens the space."
         )
     return 0
 
