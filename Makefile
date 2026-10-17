@@ -9,7 +9,7 @@ GO ?= $(shell command -v go 2>/dev/null || echo "$(HOME)/.local/go/bin/go")
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv native native-go native-dynamic test test-fast test-libcrypto test-uquic coverage gen update-openssl setup-caps build fmt lint typecheck clean FORCE
+.PHONY: help venv venv-recreate native native-go native-dynamic test test-fast test-libcrypto test-uquic coverage gen update-openssl setup-caps build fmt lint typecheck clean FORCE
 
 # OpenSSL source + build dir (git submodule) for the wide engine.
 OPENSSL_DIR ?= native/third_party/openssl
@@ -26,7 +26,8 @@ endef
 
 help:
 	@echo "freetls targets:"
-	@echo "  make venv            create .venv, install freetls[test], build the wide engine"
+	@echo "  make venv            create .venv + install freetls[test] (reuses an existing .venv)"
+	@echo "  make venv-recreate   delete .venv and recreate it (full reinstall)"
 	@echo "  make native          build native/libfreetls.so = WIDE engine (default; static libcrypto)"
 	@echo "  make native-go       build native/libfreetls_go.so = Go-only engine (no OpenSSL)"
 	@echo "  make native-dynamic  build native/libfreetls_libcrypto.so = wide engine, dynamic libcrypto (dev)"
@@ -41,10 +42,31 @@ help:
 	@echo "  make fmt / lint / typecheck"
 	@echo "  make clean           remove build artifacts"
 
+# One-command setup. Idempotent: if .venv already exists it is reused as-is (no
+# reinstall) — use `make venv-recreate` to force a fresh one. The recipe sources
+# the venv at the end, but a Make recipe runs in a subshell, so it cannot change
+# your interactive shell; run the printed `source` command to activate it here.
 venv:
+	@set -e; \
+	if [ -x .venv/bin/python ]; then \
+		echo "[venv] reusing existing .venv (no reinstall; use 'make venv-recreate' to rebuild)"; \
+	else \
+		echo "[venv] creating .venv (installs freetls[test] and builds the engines)"; \
+		python3 -m venv .venv; \
+		.venv/bin/python -m pip install --upgrade pip; \
+		.venv/bin/python -m pip install -e ".[test]"; \
+	fi; \
+	. .venv/bin/activate; \
+	echo "[venv] ready — activate it in your shell with: source .venv/bin/activate"
+
+# Force a fresh venv (the previous `make venv` behaviour).
+venv-recreate:
+	rm -rf .venv
 	python3 -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip
 	.venv/bin/python -m pip install -e ".[test]"
+	@. .venv/bin/activate; \
+	echo "[venv] recreated — activate it in your shell with: source .venv/bin/activate"
 
 # Default engine: the WIDE engine (Go + static libcrypto), symbol-hidden so it
 # never interposes on the host process (e.g. Python's _ssl).
