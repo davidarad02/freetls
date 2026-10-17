@@ -292,16 +292,31 @@ def _random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> list[i
     return picks
 
 
-# Optional extension kinds on the safe-mode whitelist that are safe to send
-# empty (or with a benign value). Safe randomization draws a random subset of
-# these instead of generic padding, which would fail safe-mode validation.
-_SAFE_OPTIONAL_EXT_KINDS: dict[str, tuple[int, Callable[[], Extension]]] = {
-    "sct": (0x0012, lambda: Extension("sct")),
-    "session_ticket": (0x0023, lambda: Extension("session_ticket")),
-    "renegotiation_info": (0xFF01, lambda: Extension("renegotiation_info")),
-    "record_size_limit": (0x001C, lambda: Extension.record_size_limit(16385)),
-    "padding": (0x0015, lambda: Extension.padding()),
+# Typed (well-formed) encodings for the padding IDs the engine has a dedicated
+# extension for; every other pool ID is emitted as empty generic padding.
+_SAFE_TYPED_EXT: dict[int, Callable[[], Extension]] = {
+    0x0012: lambda: Extension("sct"),
+    0x0015: lambda: Extension.padding(),
+    0x001C: lambda: Extension.record_size_limit(16385),
+    0x0023: lambda: Extension("session_ticket"),
+    0xFF01: lambda: Extension("renegotiation_info"),
 }
+
+
+# Extensions that assert a capability (ECH, delegated credentials): an empty
+# encoding is meaningless and a server that supports them may reject it, so they
+# stay in the unsafe padding pool but are not offered in safe mode.
+_SAFE_POOL_DENY = {0xFD00, 0xFE0D, 0x0022}
+
+
+def _safe_ext_pool() -> list[int]:
+    """The server-validated padding pool available in safe mode.
+
+    The corrected ``SAFE_PADDING_EXT_IDS`` (accepted *empty* by OpenSSL, Go and
+    Python ssl) plus renegotiation_info (0xff01), which is only valid in its
+    well-formed encoding, minus the capability-asserting extensions.
+    """
+    return sorted((set(SAFE_PADDING_EXT_IDS) | set(_SAFE_TYPED_EXT)) - _SAFE_POOL_DENY)
 
 
 def _random_padding_count(rng: random.Random, available: int, base_len: int) -> int:
@@ -323,9 +338,23 @@ def _random_padding_count(rng: random.Random, available: int, base_len: int) -> 
     return rng.randint(0, hi) if hi > 0 else 0
 
 
-def _free_safe_ext_count() -> int:
-    """Number of safe-mode whitelist extensions not already in the baseline."""
-    return sum(1 for eid, _ in _SAFE_OPTIONAL_EXT_KINDS.values() if eid not in _FUNCTIONAL_EXT_IDS)
+def _random_sigalgs(rng: random.Random, n: int | None) -> list[int]:
+    """``DEFAULT_SIGALGS`` core plus a random draw of other assigned schemes.
+
+    The core is mandatory: a signature_algorithms list with no mutually-supported
+    scheme fails the handshake (~50% failure measured without it). The extras
+    vary the list, which ``ja4.py`` appends to the JA4_c pre-image.
+    """
+    core = list(DEFAULT_SIGALGS)
+    pool = [s for s in _SIGALG_POOL if s not in core]
+    if n is None:
+        n = rng.randint(0, len(pool))
+    return core + rng.sample(pool, min(n, len(pool)))
+
+
+def _safe_ext_count() -> int:
+    """Number of safe-mode padding extensions available for a random draw."""
+    return len(_safe_ext_pool())
 
 
 def _supported_cipher_pool() -> list[int]:
@@ -341,11 +370,11 @@ def _safe_random_cipher_padding(rng: random.Random, n: int, used: set[int]) -> l
 
 def _safe_random_exts(rng: random.Random, n: int, used: set[int]) -> list[Extension]:
     out: list[Extension] = []
-    pool = [k for k, (eid, _) in _SAFE_OPTIONAL_EXT_KINDS.items() if eid not in used]
-    for kind in rng.sample(pool, min(n, len(pool))):
-        eid, build = _SAFE_OPTIONAL_EXT_KINDS[kind]
+    pool = [e for e in _safe_ext_pool() if e not in used]
+    for eid in rng.sample(pool, min(n, len(pool))):
         used.add(eid)
-        out.append(build())
+        build = _SAFE_TYPED_EXT.get(eid)
+        out.append(build() if build else Extension.generic(eid, ""))
     return out
 
 
@@ -357,6 +386,7 @@ def partial_random(
     vers_max: int = TLS13,
     n_random_ciphers: int | None = None,
     n_random_extensions: int | None = None,
+    n_random_sigalgs: int | None = None,
     seed: int | None = None,
     verify: bool | None = None,
     safe: bool | None = None,
@@ -366,9 +396,10 @@ def partial_random(
     ``n_random_ciphers`` / ``n_random_extensions`` default to a uniform draw over
     the whole feasible range, so the ``JA4_a`` cipher/extension *counts* vary per
     call (fixing them freezes that field) and the number of distinct JA4 values is
-    maximised. With ``safe`` (or global safe mode) ciphers/extensions are drawn
-    only from the engine's backed set and the whitelist, so the result passes
-    safe-mode validation.
+    maximised. ``n_random_sigalgs`` likewise adds a random draw of signature
+    schemes to the mandatory ``DEFAULT_SIGALGS`` core, varying the JA4_c pre-image.
+    With ``safe`` (or global safe mode) ciphers/extensions are drawn only from the
+    server-validated pool, so the result passes safe-mode validation.
     """
     use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
@@ -387,12 +418,13 @@ def partial_random(
         server_name=server_name,
         ciphers=base,
         alpn=alpn,
+        sigalgs=_random_sigalgs(rng, n_random_sigalgs),
         vers_min=vers_min,
         vers_max=vers_max,
         verify=verify,
     )
     if n_random_extensions is None:
-        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        pool_e = _safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_random_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
     used_e = _used_ext_ids(spec, _FUNCTIONAL_EXT_IDS)
     if use_safe:
@@ -409,6 +441,7 @@ def true_random(
     vers_max: int = TLS13,
     n_ciphers: int | None = None,
     n_extensions: int | None = None,
+    n_random_sigalgs: int | None = None,
     seed: int | None = None,
     verify: bool | None = None,
     safe: bool | None = None,
@@ -419,8 +452,9 @@ def true_random(
     injected so the handshake can complete against a real server. ``n_ciphers`` /
     ``n_extensions`` default to a uniform draw over the whole feasible range, so
     the ``JA4_a`` counts vary per call and the number of distinct JA4 values is
-    maximised. With ``safe`` (or global safe mode) padding is drawn only from the
-    engine's supported ciphers and the safe-mode extension whitelist.
+    maximised. ``n_random_sigalgs`` likewise adds a random draw of signature
+    schemes to the mandatory ``DEFAULT_SIGALGS`` core. With ``safe`` (or global
+    safe mode) padding is drawn only from the server-validated pool.
     """
     use_safe = get_safe_mode() if safe is None else bool(safe)
     rng = random.Random(seed)
@@ -439,12 +473,13 @@ def true_random(
         server_name=server_name,
         ciphers=ciphers,
         alpn=alpn,
+        sigalgs=_random_sigalgs(rng, n_random_sigalgs),
         vers_min=vers_min,
         vers_max=vers_max,
         verify=verify,
     )
     if n_extensions is None:
-        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        pool_e = _safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_extensions = _random_padding_count(rng, pool_e, len(_FUNCTIONAL_EXT_IDS))
     used_e = _used_ext_ids(spec, _FUNCTIONAL_EXT_IDS)
     if use_safe:
@@ -461,17 +496,19 @@ def safe_random(
     vers_max: int = TLS13,
     n_ciphers: int | None = None,
     n_extensions: int | None = None,
+    n_random_sigalgs: int | None = None,
     seed: int | None = None,
     verify: bool | None = None,
 ) -> FingerprintSpec:
     """Safe randomization: a functional baseline plus a random subset of the
-    engine's supported ciphers and the safe-mode extension whitelist. Always
+    engine's supported ciphers and the server-validated extension pool. Always
     passes safe-mode validation.
 
     ``n_ciphers`` / ``n_extensions`` default to a uniform draw over the whole
     feasible range, so the ``JA4_a`` counts vary per call (a fixed count is a
-    deterministic tell) and the number of distinct JA4 values is maximised. Pass
-    explicit counts to pin them."""
+    deterministic tell) and the number of distinct JA4 values is maximised;
+    ``n_random_sigalgs`` adds a random draw of signature schemes to the mandatory
+    core. Pass explicit counts to pin them."""
     return partial_random(
         server_name=server_name,
         alpn=alpn,
@@ -479,6 +516,7 @@ def safe_random(
         vers_max=vers_max,
         n_random_ciphers=n_ciphers,
         n_random_extensions=n_extensions,
+        n_random_sigalgs=n_random_sigalgs,
         seed=seed,
         verify=verify,
         safe=True,
@@ -618,6 +656,7 @@ def quic_partial_random(
     alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
     n_random_ciphers: int | None = None,
     n_random_extensions: int | None = None,
+    n_random_sigalgs: int | None = None,
     transport_parameters: Sequence[TransportParameter] | None = None,
     quic: QuicInitialSpec | None = None,
     datagrams: bool = False,
@@ -639,13 +678,14 @@ def quic_partial_random(
         server_name=server_name,
         ciphers=base,
         alpn=alpn,
+        sigalgs=_random_sigalgs(rng, n_random_sigalgs),
         transport_parameters=transport_parameters,
         quic=quic,
         datagrams=datagrams,
         verify=verify,
     )
     if n_random_extensions is None:
-        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        pool_e = _safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_random_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
     used_e = _used_ext_ids(spec, _QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:
@@ -660,6 +700,7 @@ def quic_true_random(
     alpn: Sequence[str] = DEFAULT_QUIC_ALPN,
     n_ciphers: int | None = None,
     n_extensions: int | None = None,
+    n_random_sigalgs: int | None = None,
     transport_parameters: Sequence[TransportParameter] | None = None,
     quic: QuicInitialSpec | None = None,
     datagrams: bool = False,
@@ -681,13 +722,14 @@ def quic_true_random(
         server_name=server_name,
         ciphers=ciphers,
         alpn=alpn,
+        sigalgs=_random_sigalgs(rng, n_random_sigalgs),
         transport_parameters=transport_parameters,
         quic=quic,
         datagrams=datagrams,
         verify=verify,
     )
     if n_extensions is None:
-        pool_e = _free_safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
+        pool_e = _safe_ext_count() if use_safe else len(SAFE_PADDING_EXT_IDS)
         n_extensions = _random_padding_count(rng, pool_e, len(_QUIC_FUNCTIONAL_EXT_IDS))
     used_e = _used_ext_ids(spec, _QUIC_FUNCTIONAL_EXT_IDS)
     if use_safe:

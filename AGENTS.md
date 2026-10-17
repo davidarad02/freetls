@@ -222,8 +222,13 @@ Note: coverage flags are intentionally **not** in `pyproject.toml` `addopts`
 - `src/freetls/model.py` — `FingerprintSpec` / `Extension` (the spec model).
 - `src/freetls/modes.py` — `baseline_spec` / `specific` / `partial_random` /
   `true_random` (and `quic_baseline_spec` / `quic_specific` /
-  `quic_partial_random` / `quic_true_random` for HTTP/3);
-  `SAFE_PADDING_EXT_IDS` keeps padding to assigned ext IDs a server ignores.
+  `quic_partial_random` / `quic_true_random` for HTTP/3). The random modes draw
+  their cipher/extension counts (`_random_padding_count`) and their
+  `signature_algorithms` extras uniformly, so the `JA4_a` counts and `JA4_c`
+  vary per call. `SAFE_PADDING_EXT_IDS` is the server-validated empty padding
+  pool (OpenSSL + Go + Python ssl); `_safe_ext_pool()` is the safe-mode subset
+  (minus capability-asserting ids, plus well-formed `renegotiation_info`), which
+  `safety.validate()` accepts alongside `engine.supported_extensions()`.
 - `src/freetls/session.py` — `TLSSession` (socket-like; `ja4`/`ja3`/`ja4s`,
   `h2_request`). `src/freetls/quic.py` — `QUICSession` (UDP; `ja4q`/`ja4q_r`/
   `ja4sq`, `request`, datagram helpers). `src/freetls/context.py` — `TLSContext`

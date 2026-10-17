@@ -227,29 +227,40 @@ expansion):
 - **GREASE is exempt** (JA4 excludes it).
 - Violations raise `SpecError` listing offenders.
 
-**Whitelist (pass):** `sni, alpn, supported_versions, supported_curves,
-ec_point_formats, signature_algorithms, key_share, psk_key_exchange_modes,
-extended_master_secret, renegotiation_info, session_ticket, status_request, sct,
-compress_certificate, padding, application_settings (ALPS), pre_shared_key,
-record_size_limit`.
+**Whitelist (pass):** the engine-backed typed extensions (`sni, alpn,
+supported_versions, supported_curves, ec_point_formats, signature_algorithms,
+key_share, psk_key_exchange_modes, extended_master_secret, renegotiation_info,
+session_ticket, status_request, sct, compress_certificate, padding,
+application_settings (ALPS), pre_shared_key, record_size_limit`), plus the
+**server-validated empty padding pool** (`SAFE_PADDING_EXT_IDS`, minus the
+capability-asserting extensions, plus well-formed `renegotiation_info`).
 
-**Fail:** `generic` (arbitrary ids), **ECH `0xfe0d`**, **trust_anchors
-`0xca34`**, delegated_credentials, and any unknown id.
+**Fail:** unassigned/unknown ids; the capability-asserting extensions (**ECH
+`0xfe0d`**, `ech_outer_extensions` `0xfd00`, delegated_credentials `0x0022`);
+trust_anchors `0xca34`; and the extensions whose *empty* encoding a reference
+server rejects (`0x0001, 0x000e, 0x001b, 0x0029, 0x002f, 0x0032` on OpenSSL;
+`0x002a, 0x002c, 0x0039, 0xff01` empty on Go).
 
-**Consequence:** modern **browser presets fail safe mode** (they carry GREASE
-ECH / trust_anchors). Safe mode is for fully-backed custom/simple configs.
+**Consequence:** modern **browser presets still fail safe mode** (they carry ECH
+/ trust_anchors).
 
 ### 6.4 Random modes under safe mode
-The current `partial_random` / `true_random` pad with **generic** extensions
-(`SAFE_PADDING_EXT_IDS`) and draw ciphers from the full 356-entry pool — both
-fail safe mode. Safe mode therefore requires a **new "safe randomization"**:
-draw ciphers from `supported_ciphers` and extensions from the whitelist. This is
-new functionality, added as part of this work.
+The unsafe `partial_random` / `true_random` pad with **generic** extensions and
+draw ciphers from the full assigned pool. Safe mode draws ciphers from
+`supported_ciphers` and extensions from the server-validated padding pool
+(`_safe_ext_pool()`: the corrected `SAFE_PADDING_EXT_IDS` plus well-formed
+`renegotiation_info`, minus the capability-asserting extensions). `0x0023`
+(session_ticket) was added to the pool and the four extensions Go rejects empty
+(`0x002a`, `0x002c`, `0x0039`, `0xff01`) were removed; the padding draw is
+guarded against duplicating a caller-supplied session_ticket.
 
 The safe defaults are **adaptive**: the cipher and extension counts are drawn
 uniformly over the whole feasible range (clamped so the two-digit `JA4_a` count
-field never saturates), and the sets are drawn uniformly. Fixing the count — as
-an earlier `⌊n/2⌋` heuristic did — collapses `JA4_a` to a single value and is a
+field never saturates), the sets are drawn uniformly, and the
+`signature_algorithms` list is the mandatory `DEFAULT_SIGALGS` core plus a random
+draw of other assigned schemes (the core is required — a list with no
+mutually-supported scheme fails the handshake). Fixing the count — as an earlier
+`⌊n/2⌋` heuristic did — collapses `JA4_a` to a single value and is a
 deterministic tell; the uniform draw makes every count reachable, which
 multiplies the number of distinct JA4 values (the set hashes are already
 saturated: `C(n, k) > 2^48` at `k ≈ 8`). Measured distinct JA4s over 800 seeds:
@@ -261,12 +272,13 @@ At plan time: **75 / 220 profiles pass; 145 fail** (50 unsupported ciphers;
 15 ECH; 10 trust_anchors; the rest preset-specific ids such as `0x7550`,
 `0x0022` delegated_credentials, `0x3374`, `0x754f`).
 
-**Re-measured after the post-plan P3/P4/P5 additions: 95 / 220 pass; 125 fail**
-(75 extensions-only, 30 ciphers-only, 20 both). Unbacked extension ids:
-`0xfe0d` (ECH, 40 profiles), `0x0022` (30), `0x7550` (20), `0x3374` (20),
-`0x754f` (10), `0xca34` (trust_anchors, 10). Unbacked ciphers: `0x003d` (35),
-`0xc008` (35), `0xc024` (25), `0xc028` (25), `0x0004` (RC4, 10). The pass rate
-rose because the fork now backs the DHE/PSK/SRP ciphers those presets offer.
+**Re-measured after the padding-pool widening: 103 / 248 pass; 145 fail** (95
+extensions-only, 30 ciphers-only, 20 both). Unbacked extension ids: `0xfe0d`
+(ECH), `0x0022` (delegated_credentials), `0x7550`, `0x3374`, `0x754f`, `0xca34`
+(trust_anchors). Unbacked ciphers: `0x003d`, `0xc008`, `0xc024`, `0xc028`,
+`0x0004` (RC4). The pass rate rose because the fork now backs the DHE/PSK/SRP
+ciphers those presets offer and the widened pool admits the server-validated
+padding ids.
 
 *(Table below is the plan-time calculation, when the backed pools were 27
 (Go-only) and 51 (wide). The pools are now **78** and **144**, so every

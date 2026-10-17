@@ -30,13 +30,26 @@ def test_baseline_passes_when_safe():
     safety.validate(spec)
 
 
-@pytest.mark.parametrize("ext_id", [0x7550, 0xFE0D, 0xCA34, 0x0022])
+@pytest.mark.parametrize(
+    "ext_id",
+    [0x7550, 0xCA34, 0xFE0D, 0x0022, 0x0001, 0x000E, 0x002F, 0x0032, 0x002A, 0x002C],
+)
 def test_unsupported_extensions_rejected(ext_id):
     spec = _baseline()
     spec.safe = True
     spec.extensions.append(Extension.generic(ext_id, ""))
     with pytest.raises(freetls.SpecError):
         safety.validate(spec)
+
+
+def test_server_validated_padding_pool_passes():
+    """Every safe-mode padding ID is accepted in safe mode."""
+    spec = _baseline()
+    spec.safe = True
+    for eid in modes._safe_ext_pool():
+        build = modes._SAFE_TYPED_EXT.get(eid)
+        spec.extensions.append(build() if build else Extension.generic(eid, ""))
+    safety.validate(spec)
 
 
 def test_unsupported_cipher_rejected():
@@ -89,6 +102,19 @@ def test_safe_random_passes_and_completes(tls_server_13):
     with freetls.TLSSession(spec) as s:
         s.connect("127.0.0.1", tls_server_13.port, server_hostname="localhost")
         assert s.state.version == "TLS1.3"
+
+
+@pytest.mark.parametrize("srv", ["tls_server_13", "go_server", "app_server"])
+def test_safe_random_completes_on_every_stack(request, srv):
+    """The widened safe pool validates and completes on all reference servers."""
+    server = request.getfixturevalue(srv)
+    for seed in range(10):
+        spec = modes.safe_random(server_name="localhost", verify=False, seed=seed)
+        spec.safe = True
+        safety.validate(spec)
+        with freetls.TLSSession(spec) as s:
+            s.connect("127.0.0.1", server.port, server_hostname="localhost")
+            assert s.state.version == "TLS1.3"
 
 
 def test_connect_rejects_unsafe_spec(tls_server_13):

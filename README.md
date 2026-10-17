@@ -523,21 +523,24 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   `supported_groups`, `ec_point_formats`, `signature_algorithms`, `key_share`,
   `psk_key_exchange_modes`, `extended_master_secret`, `renegotiation_info`,
   `session_ticket`, `status_request`, SCT, `compress_certificate`, `padding`,
-  `application_settings` (ALPS), `pre_shared_key`, `record_size_limit`.
+  `application_settings` (ALPS), `pre_shared_key`, `record_size_limit`, plus the
+  server-validated empty padding pool (`SAFE_PADDING_EXT_IDS`). Capability-
+  asserting extensions (ECH, delegated credentials), trust anchors and any id a
+  reference server rejects empty are excluded.
 - **GREASE is always exempt** (JA4 excludes it).
-- Modern **browser presets fail safe mode** (they carry GREASE-ECH and trust
-  anchors, and some unbacked ciphers); safe mode is for fully-backed
-  custom/simple configs. Of the 220-profile catalog, 75 pass with the default
-  engine.
+- Modern **browser presets still fail safe mode** (they carry ECH / trust
+  anchors, and some unbacked ciphers); safe mode accepts engine-backed
+  extensions plus the server-validated empty padding pool. Of the 248-profile
+  catalog, 103 pass with the default engine.
 - For randomized workloads, use `modes.safe_random(...)` (or `safe=True` on
   `partial_random`/`true_random`). The defaults are **adaptive**: the cipher and
-  extension *counts* are drawn uniformly over the whole feasible range, so the
-  `JA4_a` count fields vary per call (fixing them freezes that field), and the
-  sets are drawn uniformly, which saturates the 48-bit `JA4_b`/`JA4_c` hashes.
-  The reachable space is bounded structurally: `JA4_b`/`JA4_c` are 48-bit, and in
-  safe mode only five padding extensions are engine-backed, so safe `JA4_c` is
-  capped at 2⁵ — the unsafe modes (44 padding extensions) reach ~2⁴⁴. On the
-  Go-only engine the cipher pool is smaller and the space shrinks accordingly.
+  extension *counts* are drawn uniformly over the whole feasible range, the sets
+  are drawn uniformly, and the `signature_algorithms` list gets a random draw on
+  top of the mandatory core. The reachable space is bounded structurally:
+  `JA4_b`/`JA4_c` are 48-bit hashes; safe mode draws padding from the
+  server-validated pool (~2⁴²) and the unsafe modes from the full assigned pool
+  (~2⁴⁴). On the Go-only engine the cipher pool is smaller and the space shrinks
+  accordingly.
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
 The default is **unsafe**, for backward compatibility.
@@ -990,9 +993,11 @@ baseline_spec(server_name=None, ciphers=None, alpn=DEFAULT_ALPN,
               grease=False, grease_strategy="random", seed=None)
 specific(ciphers=None, extensions=None, server_name=None, ...)
 partial_random(server_name=None, ciphers=None, alpn=..., vers_min=..., vers_max=...,
-               n_random_ciphers=None, n_random_extensions=None, seed=None, verify=None)
+               n_random_ciphers=None, n_random_extensions=None,
+               n_random_sigalgs=None, seed=None, verify=None)
 true_random(server_name=None, alpn=..., vers_min=..., vers_max=...,
-            n_ciphers=None, n_extensions=None, seed=None, verify=None)
+            n_ciphers=None, n_extensions=None, n_random_sigalgs=None,
+            seed=None, verify=None)
 add_grease(spec, ciphers=True, groups=True, versions=True, extensions=True,
            strategy="random", seed=None)   # GREASE_VALUES: the 16 reserved codes
 
@@ -1010,6 +1015,8 @@ Leaving `n_random_ciphers`/`n_random_extensions` (and `n_ciphers`/`n_extensions`
 unset draws each count uniformly over the whole feasible range (clamped so the
 two-digit `JA4_a` count field never saturates), which maximises the number of
 distinct JA4 values: the counts vary per call and the sets are drawn uniformly.
+`n_random_sigalgs` (default: drawn) adds that many extra assigned signature
+schemes to the mandatory `DEFAULT_SIGALGS` core, varying the `JA4_c` pre-image.
 
 ### `profiles`
 

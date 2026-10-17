@@ -164,6 +164,22 @@ def test_quic_safe_mode_accepts_transport_parameters(h3_server):
         session.close()
 
 
+@pytest.mark.parametrize("mode", ["quic_partial_random", "quic_true_random"])
+@pytest.mark.parametrize("safe", [False, True], ids=["unsafe", "safe"])
+def test_quic_random_modes_handshake(h3_server, mode, safe):
+    """The QUIC random modes (widened pool + randomised sigalgs) complete."""
+    from freetls import modes
+
+    for seed in range(2):
+        spec = getattr(modes, mode)(server_name="localhost", verify=False, seed=seed, safe=safe)
+        session = QUICSession(spec)
+        try:
+            session.connect("127.0.0.1", h3_server.port, server_hostname="localhost", timeout=5)
+            assert session.ja4q
+        finally:
+            session.close()
+
+
 def test_quic_handshake_failure_is_reported():
     """A refused handshake raises and still frees the native session."""
     before = engine.active_sessions()

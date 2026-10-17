@@ -173,6 +173,24 @@ def test_unsafe_random_extension_count_within_pool():
             assert 0 <= len(generic) <= len(modes.SAFE_PADDING_EXT_IDS)
 
 
+def test_quic_random_extension_count_varies_per_seed():
+    """The JA4_a extension count is drawn in the QUIC random modes too."""
+    from freetls.fingerprint import ja4_from_spec
+
+    for fn in (
+        lambda s: modes.quic_partial_random(server_name="x", seed=s),
+        lambda s: modes.quic_true_random(server_name="x", seed=s),
+        lambda s: modes.quic_partial_random(server_name="x", seed=s, safe=True),
+        lambda s: modes.quic_true_random(server_name="x", seed=s, safe=True),
+    ):
+        exts = set()
+        for s in range(60):
+            a = ja4_from_spec(fn(s), transport="q")["ja4_a"]
+            exts.add(int(a[6:8]))
+        assert len(exts) > 3, exts
+        assert max(exts) < 100
+
+
 def test_safe_random_modes_are_diverse():
     # Regression: the safe random modes used to be deterministic (or nearly so)
     # on the Go-only engine.

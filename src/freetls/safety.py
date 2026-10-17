@@ -1,9 +1,11 @@
 """Safe-mode validation.
 
-Safe mode rejects any spec whose *effective* ClientHello contains a cipher or
-extension the engine cannot directly support. The effective hello is built
-offline by the engine (from the spec, a preset, or a ``chlo_json`` document) and
-parsed, so presets and custom documents are validated exactly as emitted.
+Safe mode rejects any spec whose *effective* ClientHello contains a cipher the
+engine cannot negotiate, or an extension that is neither engine-backed nor part
+of the server-validated empty padding pool (``modes.SAFE_PADDING_EXT_IDS`` plus
+the well-formed renegotiation_info). The effective hello is built offline by the
+engine (from the spec, a preset, or a ``chlo_json`` document) and parsed, so
+presets and custom documents are validated exactly as emitted.
 
 Unsafe is the default (backward compatible). See ``docs/route-b-plan.md`` §6.
 """
@@ -44,9 +46,14 @@ def validate(spec: FingerprintSpec) -> None:
     """Raise ``SpecError`` if safe mode is on and ``spec`` is not fully backed."""
     if not is_safe(spec):
         return
+    from .modes import _safe_ext_pool
+
     hello = parse_client_hello(effective_hello(spec))
     allowed_ciphers = set(supported_ciphers())
-    allowed_exts = set(supported_extensions())
+    # Engine-backed extensions plus the server-validated padding pool. An empty
+    # generic padding extension is emittable by the engine and ignored by every
+    # reference server, so it is safe even without a dedicated typed extension.
+    allowed_exts = set(supported_extensions()) | set(_safe_ext_pool())
     bad_ciphers = sorted({c for c in hello.ciphers if not is_grease(c)} - allowed_ciphers)
     bad_exts = sorted({e for e in hello.ext_types if not is_grease(e)} - allowed_exts)
     if bad_ciphers or bad_exts:
