@@ -79,15 +79,22 @@ _FUNCTIONAL_EXT_IDS = {
 
 # Assigned extension IDs a server will safely ignore when sent with empty data,
 # validated against every server stack the test-suite uses (OpenSSL s_server,
-# Python ssl and Go net/http). Two groups are excluded, so random modes keep an
-# assigned-only universe AND complete real handshakes against all of them:
+# Python ssl, Go net/http) *and* against a live Google front end (BoringSSL).
+# Excluded, so random modes keep an assigned-only universe AND complete real
+# handshakes against all of them:
 #   - the six that provoke an OpenSSL alert with empty data
 #     (0x0001, 0x000e, 0x001b, 0x0029, 0x002f, 0x0032);
-#   - the four whose *empty* encoding Go's crypto/tls rejects as malformed
+#   - the four whose *empty* encoding Go's crypto/tls rejects
 #     (0x002a early_data, 0x002c cookie, 0x0039 quic_transport_parameters,
-#     0xff01 renegotiation_info).
+#     0xff01 renegotiation_info — still available well-formed);
+#   - the two whose empty encoding BoringSSL rejects as malformed because they
+#     carry a certificate-type list (0x0013 client_certificate_type,
+#     0x0014 server_certificate_type);
+#   - the capability-asserting extensions an empty body cannot express
+#     (0x0022 delegated_credential, 0xfe0d encrypted_client_hello,
+#     0xfd00 ech_outer_extensions).
 # 0x0023 (session_ticket) is included: an empty session_ticket is valid on the
-# wire and accepted by all three stacks.
+# wire and accepted by all of them.
 SAFE_PADDING_EXT_IDS = [
     0x0002,
     0x0003,
@@ -100,8 +107,6 @@ SAFE_PADDING_EXT_IDS = [
     0x000F,
     0x0011,
     0x0012,
-    0x0013,
-    0x0014,
     0x0015,
     0x0016,
     0x0018,
@@ -113,7 +118,6 @@ SAFE_PADDING_EXT_IDS = [
     0x001F,
     0x0020,
     0x0021,
-    0x0022,
     0x0023,
     0x0024,
     0x0025,
@@ -131,8 +135,6 @@ SAFE_PADDING_EXT_IDS = [
     0x003C,
     0x003D,
     0x003E,
-    0xFD00,
-    0xFE0D,
 ]
 
 
@@ -303,20 +305,14 @@ _SAFE_TYPED_EXT: dict[int, Callable[[], Extension]] = {
 }
 
 
-# Extensions that assert a capability (ECH, delegated credentials): an empty
-# encoding is meaningless and a server that supports them may reject it, so they
-# stay in the unsafe padding pool but are not offered in safe mode.
-_SAFE_POOL_DENY = {0xFD00, 0xFE0D, 0x0022}
-
-
 def _safe_ext_pool() -> list[int]:
     """The server-validated padding pool available in safe mode.
 
-    The corrected ``SAFE_PADDING_EXT_IDS`` (accepted *empty* by OpenSSL, Go and
-    Python ssl) plus renegotiation_info (0xff01), which is only valid in its
-    well-formed encoding, minus the capability-asserting extensions.
+    The corrected ``SAFE_PADDING_EXT_IDS`` (accepted *empty* by OpenSSL, Go,
+    Python ssl and a live BoringSSL front end) plus renegotiation_info (0xff01),
+    which is only valid in its well-formed encoding.
     """
-    return sorted((set(SAFE_PADDING_EXT_IDS) | set(_SAFE_TYPED_EXT)) - _SAFE_POOL_DENY)
+    return sorted(set(SAFE_PADDING_EXT_IDS) | set(_SAFE_TYPED_EXT))
 
 
 def _random_padding_count(rng: random.Random, available: int, base_len: int) -> int:

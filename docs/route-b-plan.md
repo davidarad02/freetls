@@ -232,14 +232,14 @@ supported_versions, supported_curves, ec_point_formats, signature_algorithms,
 key_share, psk_key_exchange_modes, extended_master_secret, renegotiation_info,
 session_ticket, status_request, sct, compress_certificate, padding,
 application_settings (ALPS), pre_shared_key, record_size_limit`), plus the
-**server-validated empty padding pool** (`SAFE_PADDING_EXT_IDS`, minus the
-capability-asserting extensions, plus well-formed `renegotiation_info`).
+**server-validated empty padding pool** (`SAFE_PADDING_EXT_IDS`, plus well-formed
+`renegotiation_info`).
 
-**Fail:** unassigned/unknown ids; the capability-asserting extensions (**ECH
-`0xfe0d`**, `ech_outer_extensions` `0xfd00`, delegated_credentials `0x0022`);
-trust_anchors `0xca34`; and the extensions whose *empty* encoding a reference
-server rejects (`0x0001, 0x000e, 0x001b, 0x0029, 0x002f, 0x0032` on OpenSSL;
-`0x002a, 0x002c, 0x0039, 0xff01` empty on Go).
+**Fail:** unassigned/unknown ids; trust_anchors `0xca34`; and every extension
+whose *empty* encoding a reference server rejects — `0x0001, 0x000e, 0x001b,
+0x0029, 0x002f, 0x0032` (OpenSSL), `0x002a, 0x002c, 0x0039, 0xff01` (Go), and
+`0x0013`/`0x0014` (certificate-type lists, rejected by BoringSSL) — as well as
+the capability-asserting `0x0022`, `0xfe0d` and `0xfd00`.
 
 **Consequence:** modern **browser presets still fail safe mode** (they carry ECH
 / trust_anchors).
@@ -249,10 +249,12 @@ The unsafe `partial_random` / `true_random` pad with **generic** extensions and
 draw ciphers from the full assigned pool. Safe mode draws ciphers from
 `supported_ciphers` and extensions from the server-validated padding pool
 (`_safe_ext_pool()`: the corrected `SAFE_PADDING_EXT_IDS` plus well-formed
-`renegotiation_info`, minus the capability-asserting extensions). `0x0023`
-(session_ticket) was added to the pool and the four extensions Go rejects empty
-(`0x002a`, `0x002c`, `0x0039`, `0xff01`) were removed; the padding draw is
-guarded against duplicating a caller-supplied session_ticket.
+`renegotiation_info`). `0x0023` (session_ticket) was added to the pool, and every
+extension whose *empty* encoding a reference server rejects was removed — the
+four Go rejects (`0x002a`, `0x002c`, `0x0039`, `0xff01`), the two BoringSSL
+rejects as malformed (`0x0013`, `0x0014`), and the capability-asserting
+`0x0022`/`0xfe0d`/`0xfd00`. The padding draw is guarded against duplicating a
+caller-supplied session_ticket.
 
 The safe defaults are **adaptive**: the cipher and extension counts are drawn
 uniformly over the whole feasible range (clamped so the two-digit `JA4_a` count

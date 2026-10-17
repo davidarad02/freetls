@@ -109,18 +109,37 @@ def test_safe_padding_excludes_known_unsafe():
 def test_padding_pool_is_server_validated():
     """The pool excludes every empty encoding a reference server rejects.
 
-    OpenSSL rejects the first six empty; Go's crypto/tls additionally rejects
-    the next four as malformed. 0x0023 (session_ticket) is accepted everywhere.
+    OpenSSL rejects the first six empty; Go's crypto/tls rejects the next four;
+    BoringSSL rejects 0x0013/0x0014 (they carry a certificate-type list) and the
+    capability-asserting 0x0022/0xfe0d/0xfd00. 0x0023 is accepted everywhere.
     """
     for eid in (0x0001, 0x000E, 0x001B, 0x0029, 0x002F, 0x0032):
         assert eid not in modes.SAFE_PADDING_EXT_IDS
     for eid in (0x002A, 0x002C, 0x0039, 0xFF01):
         assert eid not in modes.SAFE_PADDING_EXT_IDS
+    for eid in (0x0013, 0x0014, 0x0022, 0xFE0D, 0xFD00):
+        assert eid not in modes.SAFE_PADDING_EXT_IDS
     assert 0x0023 in modes.SAFE_PADDING_EXT_IDS
 
 
-def test_random_modes_never_emit_go_hostile_exts():
-    hostile = {0x002A, 0x002C, 0x0039, 0xFF01}
+def test_random_modes_never_emit_server_hostile_exts():
+    hostile = {
+        0x002A,
+        0x002C,
+        0x0039,
+        0xFF01,  # empty encoding rejected by Go
+        0x0013,
+        0x0014,  # empty encoding rejected by BoringSSL
+        0x0022,
+        0xFE0D,
+        0xFD00,  # capability-asserting
+        0x0001,
+        0x000E,
+        0x001B,
+        0x0029,
+        0x002F,
+        0x0032,  # rejected by OpenSSL
+    }
     for seed in range(60):
         for fn in (modes.partial_random, modes.true_random, modes.safe_random):
             spec = fn(server_name="x", seed=seed)

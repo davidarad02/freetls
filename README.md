@@ -538,9 +538,9 @@ spec = freetls.modes.safe_random(server_name="example.com")               # alwa
   are drawn uniformly, and the `signature_algorithms` list gets a random draw on
   top of the mandatory core. The reachable space is bounded structurally:
   `JA4_b`/`JA4_c` are 48-bit hashes; safe mode draws padding from the
-  server-validated pool (~2⁴²) and the unsafe modes from the full assigned pool
-  (~2⁴⁴). On the Go-only engine the cipher pool is smaller and the space shrinks
-  accordingly.
+  server-validated pool and the unsafe modes from the assigned padding pool
+  (~2³⁹–2⁴⁰). On the Go-only engine the cipher pool is smaller and the space
+  shrinks accordingly.
 
 `FingerprintSpec.safe` overrides the global setting per spec (`None` = global).
 The default is **unsafe**, for backward compatibility.
